@@ -13,7 +13,7 @@ fn main(args: Array[String]) -> Unit = {
 
 ## Status
 
-The language design is closed for version 0.1. The C89 **lexer, parser, resolver, and type checker are implemented** and covered by unit tests. The code generator is still pending. The current `idem` binary resolves, type-checks, and dumps the root AST; `--tokens` dumps the token stream instead.
+The language design is closed for version 0.1. The C89 **lexer, parser, resolver, type checker, IR lowering, C89 code generator, and runtime are implemented** and covered by unit and golden tests. The `idem` binary compiles a source file with the system C compiler and runs the resulting executable; `--tokens` dumps the token stream and `--emit-c` prints the generated C89.
 
 The normative specification is in [docs/language.md](docs/language.md), and the compiler implementation guide is in [docs/compiler.md](docs/compiler.md).
 
@@ -30,8 +30,8 @@ The normative specification is in [docs/language.md](docs/language.md), and the 
 ## Repository layout
 
 ```
-src/        C89 compiler sources (lexer, parser, resolver, and type checker implemented)
-runtime/    C89 runtime and garbage collector (skeleton)
+src/        C89 compiler sources (lexer, parser, resolver, checker, IR, codegen)
+runtime/    C89 runtime, collections, printing, I/O, and mark-sweep GC
 tests/      unit tests, golden tests, and error tests
 examples/   example Idem programs
 docs/       language specification and compiler guide
@@ -43,20 +43,24 @@ LICENSE     MIT
 ## Build
 
 ```
-make            # builds ./idem
+make            # builds ./idem and the C89 runtime library
 make test       # builds and runs the unit tests
+make golden     # compiles and runs the golden tests
 make help       # lists all targets
 ```
 
-The current interface resolves, type-checks, and dumps the root AST:
+The interface compiles, links, and runs an Idem program:
 
 ```
 ./idem examples/hello.idem
+./idem examples/hello.idem arg1 arg2
 ./idem --tokens examples/hello.idem
+./idem --emit-c examples/hello.idem > hello.c
 ```
 
-The eventual interface will compile and run Idem programs with the same
-command.
+Set `IDEM_KEEP_C=1` to keep the generated C file and its temporary
+executable for inspection. The driver uses `$CC` when set, otherwise
+`cc`.
 
 ## Documentation
 
