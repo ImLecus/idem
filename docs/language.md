@@ -142,7 +142,7 @@ Collection literals use the reserved type names: `List[e1, e2, ...]` is a list l
 **Integer literals**
 
 ```
-int-lit ::= '0' | [1-9][0-9_]* | '0x' [0-9A-Fa-f_]+ | '0b' [01_]+
+int-lit ::= '0' | [1-9][0-9_]* | ('0x' | '0X') [0-9A-Fa-f_]+ | ('0b' | '0B') [01_]+
 ```
 
 Underscores are ignored. The value must fit in a signed 64-bit integer; otherwise it is a compile-time error. There are no suffixes.

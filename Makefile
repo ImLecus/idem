@@ -7,7 +7,7 @@
 # Targets:
 #   make            build the compiler when src/*.c exists
 #   make runtime    build build/libidemrt.a when runtime/*.c exists
-#   make test       run the test suite (runner not implemented yet)
+#   make test       build and run the unit tests
 #   make check      clean rebuild
 #   make dirs       create the directory skeleton
 #   make clean      remove build artifacts
@@ -27,8 +27,13 @@ RUNTIME_LIB := $(BUILD)/libidemrt.a
 
 SRC         := $(wildcard src/*.c)
 OBJ         := $(patsubst src/%.c,$(OBJDIR)/%.o,$(SRC))
+CORE_OBJ    := $(filter-out $(OBJDIR)/main.o,$(OBJ))
 RUNTIME_SRC := $(wildcard runtime/*.c)
 RUNTIME_OBJ := $(patsubst runtime/%.c,$(RUNTIME_DIR)/%.o,$(RUNTIME_SRC))
+
+UNIT_SRC    := $(wildcard tests/unit/*.c)
+UNIT_OBJ    := $(patsubst tests/unit/%.c,$(BUILD)/unit/%.o,$(UNIT_SRC))
+UNIT_BIN    := $(BUILD)/unit-tests
 
 .PHONY: all compiler runtime test check dirs clean help
 
@@ -45,7 +50,7 @@ $(BIN): $(OBJ)
 
 $(OBJDIR)/%.o: src/%.c
 	@mkdir -p $(OBJDIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
 
 runtime: $(RUNTIME_LIB)
 
@@ -59,17 +64,31 @@ $(RUNTIME_LIB): $(RUNTIME_OBJ)
 
 $(RUNTIME_DIR)/%.o: runtime/%.c
 	@mkdir -p $(RUNTIME_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
 
-test: compiler
-	@echo "test: no test runner yet"
-	@echo "      add unit tests under tests/unit/ and golden tests under tests/golden/"
+test: compiler $(UNIT_BIN)
+	@if [ -x "$(UNIT_BIN)" ]; then \
+		"$(UNIT_BIN)"; \
+	else \
+		echo "test: no unit tests yet"; \
+	fi
+
+$(UNIT_BIN): $(UNIT_OBJ) $(CORE_OBJ)
+	@if [ -z "$(UNIT_SRC)" ]; then \
+		echo "unit: no unit tests in tests/unit/ yet"; \
+	else \
+		$(CC) $(LDFLAGS) -o $@ $(UNIT_OBJ) $(CORE_OBJ) $(LDLIBS); \
+	fi
+
+$(BUILD)/unit/%.o: tests/unit/%.c
+	@mkdir -p $(BUILD)/unit
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
 
 check: clean compiler
 
 dirs:
 	@mkdir -p src runtime tests/unit tests/golden tests/errors $(OBJDIR) $(RUNTIME_DIR)
-	@touch src/.gitkeep runtime/.gitkeep tests/unit/.gitkeep tests/golden/.gitkeep tests/errors/.gitkeep
+	@touch runtime/.gitkeep tests/golden/.gitkeep tests/errors/.gitkeep
 
 clean:
 	rm -rf $(BUILD) $(BIN)
@@ -79,7 +98,7 @@ help:
 	@echo "  all (default)  build the compiler when src/*.c exists"
 	@echo "  compiler       same as all"
 	@echo "  runtime        build build/libidemrt.a when runtime/*.c exists"
-	@echo "  test           run the test suite (runner not implemented yet)"
+	@echo "  test           build and run unit tests from tests/unit/"
 	@echo "  check          clean rebuild of the compiler"
 	@echo "  dirs           create the directory skeleton"
 	@echo "  clean          remove build artifacts"
