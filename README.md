@@ -13,7 +13,7 @@ fn main(args: Array[String]) -> Unit = {
 
 ## Status
 
-The language design is closed for version 0.1. The C89 **lexer is implemented** and covered by unit tests. The parser, type checker, and code generator are still pending. The current `idem` binary dumps the token stream of a source file.
+The language design is closed for version 0.1. The C89 **lexer and parser are implemented** and covered by unit tests. The type checker, resolver, and code generator are still pending. The current `idem` binary parses a source file and dumps its AST; `--tokens` dumps the token stream instead.
 
 The normative specification is in [docs/language.md](docs/language.md), and the compiler implementation guide is in [docs/compiler.md](docs/compiler.md).
 
@@ -30,7 +30,7 @@ The normative specification is in [docs/language.md](docs/language.md), and the 
 ## Repository layout
 
 ```
-src/        C89 compiler sources (lexer implemented)
+src/        C89 compiler sources (lexer and parser implemented)
 runtime/    C89 runtime and garbage collector (skeleton)
 tests/      unit tests, golden tests, and error tests
 examples/   example Idem programs
@@ -48,10 +48,11 @@ make test       # builds and runs the unit tests
 make help       # lists all targets
 ```
 
-The current interface dumps tokens:
+The current interface dumps the parsed AST:
 
 ```
 ./idem examples/hello.idem
+./idem --tokens examples/hello.idem
 ```
 
 The eventual interface will compile and run Idem programs with the same

@@ -89,7 +89,7 @@ Source files are UTF-8. A leading UTF-8 byte-order mark (U+FEFF) is ignored. Inv
 
 ### 3.2. Whitespace and newlines
 
-Space, tab, carriage return, and line feed are whitespace. Newlines separate expressions inside blocks (see §6.2). A newline is ignored when the previous token cannot end an expression or the next token cannot begin one.
+Space, tab, carriage return, and line feed are whitespace. Newlines separate expressions inside blocks (see §6.2). A newline is ignored in an explicitly incomplete context: after a binary operator, `=`, `,`, `(`, `[`, `then`, `else`, `=>`, `:`, `->`, or `|`. A newline before a binary operator or postfix operator is a separator, not a continuation; place the operator at the end of the previous line instead.
 
 ### 3.3. Comments
 
@@ -588,6 +588,7 @@ match scrutinee {
 - The result type is the join of the arm expression types. Arms of type `Never` do not contribute.
 - There are no guards.
 - Unreachable arms are compile-time errors.
+- A struct or map literal used directly as the scrutinee must be parenthesized, because `{` starts the match arms: `match (Point { x: 1, y: 2 }) { ... }`.
 
 ### 6.5. Functions
 
