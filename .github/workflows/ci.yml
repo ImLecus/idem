@@ -22,6 +22,7 @@ jobs:
 
     env:
       CFLAGS: -std=c89 -pedantic -Wall -Wextra -Werror -Wdeclaration-after-statement -O2 -g
+      CC: ${{ matrix.compiler }}
 
     steps:
       - name: Checkout
@@ -30,10 +31,21 @@ jobs:
       - name: Show compiler version
         run: ${{ matrix.compiler }} --version
 
-      - name: Build and run tests
+      - name: Build and run unit tests
         run: make CC=${{ matrix.compiler }} test
 
-      - name: Parse example programs
+      - name: Run golden tests
+        run: make CC=${{ matrix.compiler }} golden
+
+      - name: Compile generated C with strict warnings
+        run: |
+          for file in examples/*.idem; do
+            ./idem --emit-c "$file" > /tmp/idem-generated.c
+            ${{ matrix.compiler }} -std=c89 -pedantic -Wall -Wextra -Werror \
+              -Iruntime -c /tmp/idem-generated.c -o /tmp/idem-generated.o
+          done
+
+      - name: Run example programs
         run: |
           for file in examples/*.idem; do
             ./idem "$file" >/dev/null
