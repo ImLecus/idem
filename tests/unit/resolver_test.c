@@ -65,6 +65,7 @@ static void test_ok_program(void)
                      "fn helper(n: Int) -> Number = n\n"));
     CHECK(write_file("build/_resolver_ok_root.idem",
                      "import \"_resolver_ok_lib.idem\"\n"
+                     "import \"./_resolver_ok_lib.idem\"\n"
                      "fn main(args: Array[String]) -> Unit = ()\n"
                      "fn use(p: Point) -> Int = p.x\n"));
 
@@ -260,6 +261,13 @@ static void test_errors(void)
                      "fn main(args: Array[String]) -> Unit = ()\n"));
     expect_error("build/_resolver_dup_param.idem", "duplicate parameter");
 
+    CHECK(write_file("build/_resolver_param_shadow.idem",
+                     "struct P { x: Int }\n"
+                     "fn f(P: Int) -> Int = 1\n"
+                     "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_error("build/_resolver_param_shadow.idem",
+                 "shadows a type name");
+
     remove("build/_resolver_alias_cycle.idem");
     remove("build/_resolver_cycle_a.idem");
     remove("build/_resolver_cycle_b.idem");
@@ -276,6 +284,7 @@ static void test_errors(void)
     remove("build/_resolver_unknown.idem");
     remove("build/_resolver_dup_field.idem");
     remove("build/_resolver_dup_param.idem");
+    remove("build/_resolver_param_shadow.idem");
 }
 
 int resolver_test_run(void)

@@ -525,8 +525,10 @@ static const char *resolver_read_source(Resolver *r, const char *path,
                                          size_t *out_len, Span err_span)
 {
     FILE *f;
-    long size;
     char *buf;
+    char *out;
+    size_t cap;
+    size_t len;
     size_t n;
 
     f = fopen(path, "rb");
@@ -535,32 +537,57 @@ static const char *resolver_read_source(Resolver *r, const char *path,
         return NULL;
     }
 
-    if (fseek(f, 0L, SEEK_END) != 0) {
+    cap = 4096;
+    len = 0;
+    buf = (char *)malloc(cap);
+    if (buf == NULL) {
         fclose(f);
-        resolver_error(r, err_span, "cannot seek '%s'", path);
+        resolver_error(r, err_span, "out of memory");
         return NULL;
     }
 
-    size = ftell(f);
-    if (size < 0) {
-        fclose(f);
-        resolver_error(r, err_span, "cannot determine size of '%s'", path);
-        return NULL;
+    for (;;) {
+        if (len + 1 >= cap) {
+            size_t new_cap;
+            char *new_buf;
+
+            new_cap = cap * 2;
+            new_buf = (char *)realloc(buf, new_cap);
+            if (new_buf == NULL) {
+                free(buf);
+                fclose(f);
+                resolver_error(r, err_span, "out of memory");
+                return NULL;
+            }
+            buf = new_buf;
+            cap = new_cap;
+        }
+
+        n = fread(buf + len, 1, cap - len - 1, f);
+        len += n;
+        if (n == 0) {
+            break;
+        }
     }
 
-    rewind(f);
-    buf = (char *)resolver_alloc(r, (size_t)size + 1);
-    n = fread(buf, 1, (size_t)size, f);
-    fclose(f);
-
-    if (n != (size_t)size) {
+    if (ferror(f)) {
+        free(buf);
+        fclose(f);
         resolver_error(r, err_span, "cannot read '%s'", path);
         return NULL;
     }
 
-    buf[n] = '\0';
-    *out_len = n;
-    return buf;
+    fclose(f);
+
+    out = (char *)resolver_alloc(r, len + 1);
+    if (len != 0) {
+        memcpy(out, buf, len);
+    }
+    out[len] = '\0';
+    free(buf);
+
+    *out_len = len;
+    return out;
 }
 
 static Module *load_module(Resolver *r, const char *path, Span span,
@@ -1105,6 +1132,23 @@ static void resolve_fn_symbol(Resolver *r, Module *m, Symbol *sym)
                                (int)param->name_len, param->name,
                                sym->name);
                 break;
+            }
+        }
+
+        if (is_reserved_name(param->name, param->name_len)) {
+            resolver_error(r, param->span,
+                           "parameter '%.*s' shadows a reserved name",
+                           (int)param->name_len, param->name);
+        } else {
+            Symbol *shadow;
+            shadow = resolver_lookup(r, m, param->name, param->name_len);
+            if (shadow != NULL &&
+                (shadow->kind == SYM_ALIAS ||
+                 shadow->kind == SYM_STRUCT ||
+                 shadow->kind == SYM_ENUM)) {
+                resolver_error(r, param->span,
+                               "parameter '%.*s' shadows a type name",
+                               (int)param->name_len, param->name);
             }
         }
 
