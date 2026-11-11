@@ -116,6 +116,11 @@ tests/
     golden/         .idem programs with expected stdout/stderr/exit
     errors/         .idem programs with expected diagnostics
     run_golden.sh   golden test runner
+benchmarks/
+    README.md       benchmark methodology and knobs
+    compiler_bench.c in-process phase timing
+    generate_inputs.sh synthetic compiler and runtime workloads
+    run.sh          runtime benchmark driver
 examples/
 docs/
 private/
@@ -878,12 +883,23 @@ The test runner (`tests/run_golden.sh`, invoked by `make golden`) compiles and r
 
 Error tests contain an `.idem` file and an `errors.txt` file with expected diagnostics. The runner compares file, line, column, and message.
 
-### 12.5. Future testing
+### 12.5. Benchmarks
+
+`benchmarks/` contains performance inputs and runners:
+
+- `make bench-compiler` measures resolver, checker, lowering, and codegen CPU time on a generated module with hundreds of nominal types and functions;
+- `make bench-runtime` compiles a set of workloads once and measures wall time for recursion, arrays, strings, maps, GC, recursive enums, and closures;
+- `make bench` runs both.
+
+The compiler benchmark runs the pipeline in-process. The runtime benchmark excludes C compilation by generating and building each workload once before timing repeated executions. See `benchmarks/README.md` for workload sizes and environment variables.
+
+### 12.6. Future testing
 
 - Property-based tests for union normalization and subtyping.
 - Fuzzing for the lexer and parser.
 - Differential tests against a reference interpreter.
 - Stress tests for the GC.
+- Automated performance regression tracking.
 
 ---
 

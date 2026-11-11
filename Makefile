@@ -9,6 +9,7 @@
 #   make runtime    build build/libidemrt.a when runtime/*.c exists
 #   make test       build and run the unit tests
 #   make golden     compile and run the golden tests
+#   make bench      build and run compiler and runtime benchmarks
 #   make check      clean rebuild
 #   make dirs       create the directory skeleton
 #   make clean      remove build artifacts
@@ -38,7 +39,10 @@ UNIT_SRC    := $(wildcard tests/unit/*.c)
 UNIT_OBJ    := $(patsubst tests/unit/%.c,$(BUILD)/unit/%.o,$(UNIT_SRC))
 UNIT_BIN    := $(BUILD)/unit-tests
 
-.PHONY: all compiler runtime test check dirs clean help golden
+COMPILER_BENCH := $(BUILD)/compiler-bench
+
+.PHONY: all compiler runtime test check dirs clean help golden \
+        bench bench-compiler bench-runtime
 
 all: compiler runtime
 
@@ -81,6 +85,20 @@ test: compiler runtime $(UNIT_BIN)
 golden: compiler
 	@sh tests/run_golden.sh
 
+bench: compiler $(COMPILER_BENCH)
+	@sh benchmarks/run.sh all
+
+bench-compiler: compiler $(COMPILER_BENCH)
+	@sh benchmarks/run.sh compiler
+
+bench-runtime: compiler
+	@sh benchmarks/run.sh runtime
+
+$(COMPILER_BENCH): benchmarks/compiler_bench.c $(CORE_OBJ)
+	@mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) benchmarks/compiler_bench.c \
+		$(CORE_OBJ) $(LDLIBS) -o $@
+
 $(UNIT_BIN): $(UNIT_OBJ) $(CORE_OBJ)
 	@if [ -z "$(UNIT_SRC)" ]; then \
 		echo "unit: no unit tests in tests/unit/ yet"; \
@@ -108,6 +126,9 @@ help:
 	@echo "  runtime        build build/libidemrt.a when runtime/*.c exists"
 	@echo "  test           build and run unit tests from tests/unit/"
 	@echo "  golden         compile and run golden tests from tests/golden/"
+	@echo "  bench          run compiler and runtime benchmarks"
+	@echo "  bench-compiler run only the compiler phase benchmark"
+	@echo "  bench-runtime  run only the generated-program benchmarks"
 	@echo "  check          clean rebuild of the compiler"
 	@echo "  dirs           create the directory skeleton"
 	@echo "  clean          remove build artifacts"
