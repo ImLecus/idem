@@ -21,4 +21,6 @@ typedef struct u64 {
     u16 w[4]; /* little-endian limbs */
 } u64;
 
+void u64_print(u64 value);
+
 #endif /* IDEM_PLATFORM_H */
