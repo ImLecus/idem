@@ -1079,7 +1079,8 @@ Operating-system errors are mapped to `NotFound`, `PermissionDenied`, or `Io(mes
 
 Built-ins with multiple signatures are resolved using the static types of the arguments:
 
-- The argument types must match exactly one overload, after alias expansion and union normalization.
+- The argument types must select exactly one overload, after alias expansion and union normalization.
+- Arguments must be assignable to the selected overload's parameter types.
 - If an argument has a union type, the call is ambiguous unless the union is first eliminated with `match`.
 - If no overload matches, the call is a type error.
 - If more than one overload matches, the call is a type error (ambiguity).

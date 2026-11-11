@@ -438,7 +438,6 @@ static int orderable_rec(Type *type)
     case TY_CHAR:
     case TY_STRING:
     case TY_BYTES:
-    case TY_UNIT:
     case TY_NEVER:
         return 1;
     case TY_TUPLE:
@@ -469,7 +468,6 @@ static int hashable_rec(TypeChecker *c, Type *type, SeenInfo *seen)
     case TY_CHAR:
     case TY_STRING:
     case TY_BYTES:
-    case TY_NEVER:
     case TY_ERROR:
         return 1;
     case TY_TUPLE:
@@ -785,6 +783,9 @@ static Type *check_tuple(TypeChecker *c, AstExpr *expr, Type *expected)
 
     items = check_type_list_from_exprs(c, expr->as.tuple.items,
                                        expected_items);
+    if (expected_arity == actual_arity && expected_items != NULL) {
+        return expected;
+    }
     return type_tuple(c->arena, items);
 }
 
@@ -793,8 +794,10 @@ static Type *check_sequence(TypeChecker *c, AstExpr *expr, Type *expected,
 {
     Type *element_expected;
     Type *element_type;
+    AstExprList *items;
     AstExprList *it;
 
+    items = is_list ? expr->as.list.items : expr->as.array.items;
     element_expected = NULL;
     if (expected != NULL) {
         if (is_list && expected->kind == TY_LIST) {
@@ -804,7 +807,7 @@ static Type *check_sequence(TypeChecker *c, AstExpr *expr, Type *expected,
         }
     }
 
-    if (expr->as.array.items == NULL) {
+    if (items == NULL) {
         if (expected != NULL &&
             ((is_list && expected->kind == TY_LIST) ||
              (!is_list && expected->kind == TY_ARRAY))) {
@@ -817,13 +820,13 @@ static Type *check_sequence(TypeChecker *c, AstExpr *expr, Type *expected,
     }
 
     if (element_expected != NULL) {
-        for (it = expr->as.array.items; it != NULL; it = it->next) {
+        for (it = items; it != NULL; it = it->next) {
             check_expr(c, it->expr, element_expected);
         }
         return expected;
     }
 
-    element_type = join_expr_item_types(c, expr->as.array.items);
+    element_type = join_expr_item_types(c, items);
     if (is_list) {
         return type_list_of(c->arena, element_type);
     }
@@ -2596,12 +2599,13 @@ static Type *union_pair(TypeChecker *c, Type *a, Type *b)
 }
 
 static int builtin_arg_count(TypeChecker *c, Span span,
-                             const char *name, int actual, int expected)
+                             const char *name, size_t name_len,
+                             int actual, int expected)
 {
     if (actual != expected) {
         checker_error(c, span,
-                      "built-in '%s' has the wrong number of arguments",
-                      name);
+                      "built-in '%.*s' has the wrong number of arguments",
+                      (int)name_len, name);
         return 0;
     }
     return 1;
@@ -2627,35 +2631,35 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
 
     if (name_eq(name, name_len, "print") ||
         name_eq(name, name_len, "println")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         result = c->resolver->ty_unit;
     } else if (name_eq(name, name_len, "readLine")) {
-        if (!builtin_arg_count(c, span, name, argc, 0)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 0)) return c->resolver->ty_error;
         result = union_pair(c, c->resolver->ty_string, c->resolver->ty_unit);
     } else if (name_eq(name, name_len, "readFile")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = union_pair(c, c->resolver->ty_string,
                             c->resolver->error_info->type);
     } else if (name_eq(name, name_len, "writeFile")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         check_expected(c, span, argv[1], c->resolver->ty_string);
         result = union_pair(c, c->resolver->ty_unit,
                             c->resolver->error_info->type);
     } else if (name_eq(name, name_len, "flush")) {
-        if (!builtin_arg_count(c, span, name, argc, 0)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 0)) return c->resolver->ty_error;
         result = c->resolver->ty_unit;
     } else if (name_eq(name, name_len, "exit")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_int);
         result = c->resolver->ty_never;
     } else if (name_eq(name, name_len, "panic")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = c->resolver->ty_never;
     } else if (name_eq(name, name_len, "len")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_STRING && argv[0]->kind != TY_BYTES &&
             argv[0]->kind != TY_ARRAY && argv[0]->kind != TY_LIST &&
             argv[0]->kind != TY_MAP && argv[0]->kind != TY_ERROR) {
@@ -2664,7 +2668,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         }
         result = c->resolver->ty_int;
     } else if (name_eq(name, name_len, "get")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind == TY_ARRAY || argv[0]->kind == TY_LIST) {
             check_expected(c, span, argv[1], c->resolver->ty_int);
             result = union_pair(c,
@@ -2681,7 +2685,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
             return c->resolver->ty_error;
         }
     } else if (name_eq(name, name_len, "set")) {
-        if (!builtin_arg_count(c, span, name, argc, 3)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 3)) return c->resolver->ty_error;
         if (argv[0]->kind == TY_ARRAY) {
             check_expected(c, span, argv[1], c->resolver->ty_int);
             check_expected(c, span, argv[2], argv[0]->as.array.element);
@@ -2695,7 +2699,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
             return c->resolver->ty_error;
         }
     } else if (name_eq(name, name_len, "remove")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_MAP) {
             checker_error(c, span, "'remove' expects a Map");
             return c->resolver->ty_error;
@@ -2703,7 +2707,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         check_expected(c, span, argv[1], argv[0]->as.map.key);
         result = argv[0];
     } else if (name_eq(name, name_len, "push")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_LIST) {
             checker_error(c, span, "'push' expects a List");
             return c->resolver->ty_error;
@@ -2711,7 +2715,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         check_expected(c, span, argv[1], argv[0]->as.list.element);
         result = argv[0];
     } else if (name_eq(name, name_len, "concat")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind == TY_STRING) {
             check_expected(c, span, argv[1], c->resolver->ty_string);
             result = c->resolver->ty_string;
@@ -2729,7 +2733,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
             return c->resolver->ty_error;
         }
     } else if (name_eq(name, name_len, "slice")) {
-        if (!builtin_arg_count(c, span, name, argc, 3)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 3)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_STRING && argv[0]->kind != TY_BYTES) {
             checker_error(c, span, "'slice' expects String or Bytes");
             return c->resolver->ty_error;
@@ -2738,7 +2742,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         check_expected(c, span, argv[2], c->resolver->ty_int);
         result = argv[0];
     } else if (name_eq(name, name_len, "compare")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind == TY_STRING) {
             check_expected(c, span, argv[1], c->resolver->ty_string);
         } else if (argv[0]->kind == TY_BYTES) {
@@ -2749,7 +2753,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         }
         result = c->resolver->ty_int;
     } else if (name_eq(name, name_len, "byteAt")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_STRING && argv[0]->kind != TY_BYTES) {
             checker_error(c, span, "'byteAt' expects String or Bytes");
             return c->resolver->ty_error;
@@ -2757,31 +2761,31 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         check_expected(c, span, argv[1], c->resolver->ty_int);
         result = union_pair(c, c->resolver->ty_int, c->resolver->ty_unit);
     } else if (name_eq(name, name_len, "charAt")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         check_expected(c, span, argv[1], c->resolver->ty_int);
         result = union_pair(c, c->resolver->ty_char, c->resolver->ty_unit);
     } else if (name_eq(name, name_len, "chars")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = type_array(c->arena, c->resolver->ty_char);
     } else if (name_eq(name, name_len, "toInt")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = union_pair(c, c->resolver->ty_int, c->resolver->ty_unit);
     } else if (name_eq(name, name_len, "toFloat")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = union_pair(c, c->resolver->ty_float, c->resolver->ty_unit);
     } else if (name_eq(name, name_len, "toString")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         result = c->resolver->ty_string;
     } else if (name_eq(name, name_len, "toBytes")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_string);
         result = c->resolver->ty_bytes;
     } else if (name_eq(name, name_len, "fromBytes")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_bytes);
         result = union_pair(c, c->resolver->ty_string,
                             c->resolver->error_info->type);
@@ -2789,7 +2793,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         Type *element;
         Type *fn;
         Type *result_element;
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_ARRAY && argv[0]->kind != TY_LIST) {
             checker_error(c, span, "'map' expects an Array or List");
             return c->resolver->ty_error;
@@ -2812,7 +2816,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
     } else if (name_eq(name, name_len, "filter")) {
         Type *element;
         Type *fn;
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_ARRAY && argv[0]->kind != TY_LIST) {
             checker_error(c, span, "'filter' expects an Array or List");
             return c->resolver->ty_error;
@@ -2834,7 +2838,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         Type *element;
         Type *fn;
         Type *init;
-        if (!builtin_arg_count(c, span, name, argc, 3)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 3)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_ARRAY && argv[0]->kind != TY_LIST) {
             checker_error(c, span, "'fold' expects an Array or List");
             return c->resolver->ty_error;
@@ -2857,7 +2861,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         result = init;
     } else if (name_eq(name, name_len, "sum")) {
         Type *element;
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_ARRAY && argv[0]->kind != TY_LIST) {
             checker_error(c, span, "'sum' expects an Array or List");
             return c->resolver->ty_error;
@@ -2871,21 +2875,21 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         }
         result = element;
     } else if (name_eq(name, name_len, "keys")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_MAP) {
             checker_error(c, span, "'keys' expects a Map");
             return c->resolver->ty_error;
         }
         result = type_array(c->arena, argv[0]->as.map.key);
     } else if (name_eq(name, name_len, "values")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_MAP) {
             checker_error(c, span, "'values' expects a Map");
             return c->resolver->ty_error;
         }
         result = type_array(c->arena, argv[0]->as.map.value);
     } else if (name_eq(name, name_len, "abs")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_INT && argv[0]->kind != TY_FLOAT) {
             checker_error(c, span, "'abs' expects Int or Float");
             return c->resolver->ty_error;
@@ -2893,7 +2897,7 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         result = argv[0];
     } else if (name_eq(name, name_len, "min") ||
                name_eq(name, name_len, "max")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_INT && argv[0]->kind != TY_FLOAT) {
             checker_error(c, span, "'%.*s' expects Int or Float", (int)name_len, name);
             return c->resolver->ty_error;
@@ -2907,24 +2911,23 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
     } else if (name_eq(name, name_len, "sqrt") ||
                name_eq(name, name_len, "floor") ||
                name_eq(name, name_len, "ceil")) {
-        if (!builtin_arg_count(c, span, name, argc, 1)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_float);
         result = c->resolver->ty_float;
     } else if (name_eq(name, name_len, "pow")) {
-        if (!builtin_arg_count(c, span, name, argc, 2)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
         check_expected(c, span, argv[0], c->resolver->ty_float);
         check_expected(c, span, argv[1], c->resolver->ty_float);
         result = c->resolver->ty_float;
     } else if (name_eq(name, name_len, "random") ||
                name_eq(name, name_len, "now")) {
-        if (!builtin_arg_count(c, span, name, argc, 0)) return c->resolver->ty_error;
+        if (!builtin_arg_count(c, span, name, name_len, argc, 0)) return c->resolver->ty_error;
         result = c->resolver->ty_int;
     } else {
         checker_error(c, span, "unknown built-in '%.*s'", (int)name_len, name);
         result = c->resolver->ty_error;
     }
 
-    check_expected(c, expr->span, result, NULL);
     return result;
 }
 
