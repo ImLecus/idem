@@ -955,7 +955,8 @@ static Type *check_struct_literal(TypeChecker *c, AstExpr *expr,
             }
         }
         if (!found) {
-            checker_error(c, expr->span, "missing field '%s'", field->name);
+            checker_error(c, expr->span, "missing field '%.*s'",
+                          (int)field->name_len, field->name);
         }
     }
 
@@ -1491,6 +1492,7 @@ static Type *check_expr(TypeChecker *c, AstExpr *expr, Type *expected)
     }
 
     check_expected(c, expr->span, actual, expected);
+    expr->type = actual;
     return actual;
 }
 
@@ -1606,6 +1608,8 @@ static void check_pattern(TypeChecker *c, AstPattern *pat, Type *scrutinee,
     if (pat == NULL || scrutinee == NULL) {
         return;
     }
+
+    pat->sem_type = scrutinee;
 
     switch (pat->kind) {
     case PAT_WILDCARD:
@@ -1742,8 +1746,8 @@ static void check_pattern(TypeChecker *c, AstPattern *pat, Type *scrutinee,
             sub = find_pattern_field(pat->as.struct_.fields,
                                      field->name, field->name_len);
             if (sub == NULL) {
-                checker_error(c, pat->span, "missing struct field '%s'",
-                              field->name);
+                checker_error(c, pat->span, "missing struct field '%.*s'",
+                              (int)field->name_len, field->name);
             } else {
                 check_pattern(c, sub, field->type, allow_refutable,
                               head, tail);
@@ -1825,6 +1829,7 @@ static void check_pattern(TypeChecker *c, AstPattern *pat, Type *scrutinee,
 
         member = checker_resolve_type(c, pat->as.type.type, pat->span);
         validate_type(c, member, pat->span, NULL);
+        pat->sem_type = member;
         if (!union_has_member(scrutinee, member)) {
             checker_error(c, pat->span,
                           "type pattern is not a member of the union");
@@ -3436,12 +3441,28 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         result = type_array(c->arena, c->resolver->ty_char);
     } else if (name_eq(name, name_len, "toInt")) {
         if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
-        check_expected(c, span, argv[0], c->resolver->ty_string);
-        result = union_pair(c, c->resolver->ty_int, c->resolver->ty_unit);
+        if (argv[0]->kind == TY_STRING || argv[0]->kind == TY_FLOAT) {
+            result = union_pair(c, c->resolver->ty_int,
+                                c->resolver->ty_unit);
+        } else if (argv[0]->kind == TY_ERROR) {
+            result = c->resolver->ty_error;
+        } else {
+            checker_error(c, span, "'toInt' expects a String or Float");
+            result = c->resolver->ty_error;
+        }
     } else if (name_eq(name, name_len, "toFloat")) {
         if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
-        check_expected(c, span, argv[0], c->resolver->ty_string);
-        result = union_pair(c, c->resolver->ty_float, c->resolver->ty_unit);
+        if (argv[0]->kind == TY_STRING) {
+            result = union_pair(c, c->resolver->ty_float,
+                                c->resolver->ty_unit);
+        } else if (argv[0]->kind == TY_INT) {
+            result = c->resolver->ty_float;
+        } else if (argv[0]->kind == TY_ERROR) {
+            result = c->resolver->ty_error;
+        } else {
+            checker_error(c, span, "'toFloat' expects a String or Int");
+            result = c->resolver->ty_error;
+        }
     } else if (name_eq(name, name_len, "toString")) {
         if (!builtin_arg_count(c, span, name, name_len, argc, 1)) return c->resolver->ty_error;
         result = c->resolver->ty_string;

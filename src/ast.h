@@ -11,6 +11,7 @@ typedef struct AstExpr AstExpr;
 typedef struct AstPattern AstPattern;
 typedef struct AstDecl AstDecl;
 typedef struct AstParam AstParam;
+struct Type;
 
 /* ------------------------------------------------------------------ */
 /* Generic lists                                                       */
@@ -167,6 +168,7 @@ typedef struct AstBlockItem {
 struct AstExpr {
     AstExprKind kind;
     Span span;
+    struct Type *type;
     union {
         struct {
             u64 value;
@@ -275,6 +277,8 @@ struct AstPattern {
     AstPatternKind kind;
     Span span;
     int is_binding; /* struct-pattern shorthand is always a binding */
+    struct Type *sem_type;
+    int slot;       /* lowering: local slot for bindings */
     union {
         struct {
             const char *name;

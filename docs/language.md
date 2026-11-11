@@ -990,8 +990,8 @@ Built-ins fall into four categories:
 | `compare`   | `(String, String) -> Int`, `(Bytes, Bytes) -> Int`            | Lexicographic comparison by byte; negative, zero, or positive.                            |
 | `charAt`    | `(String, Int) -> Char \| Unit`                               | The `i`-th Unicode scalar, or `Unit` if out of range.                                     |
 | `chars`     | `(String) -> Array[Char]`                                     | The Unicode scalars of the string.                                                        |
-| `toInt`     | `(String) -> Int \| Unit`                                     | Parses a decimal integer. Returns `Unit` on failure or overflow.                          |
-| `toFloat`   | `(String) -> Float \| Unit`                                   | Parses a decimal float. Returns `Unit` on failure.                                        |
+| `toInt`     | `(String) -> Int \| Unit`, `(Float) -> Int \| Unit`           | Parses a decimal integer, or truncates a Float toward zero. Returns `Unit` on failure, overflow, or a non-finite/out-of-range Float. |
+| `toFloat`   | `(String) -> Float \| Unit`, `(Int) -> Float`                 | Parses a decimal float, or converts an Int to Float. Returns `Unit` on parse failure.     |
 | `toString`  | `(Any) -> String`                                             | Canonical textual representation.                                                         |
 | `toBytes`   | `(String) -> Bytes`                                           | UTF-8 bytes.                                                                              |
 | `fromBytes` | `(Bytes) -> String \| Error`                                  | Validates UTF-8 and returns a string, or `InvalidUtf8`.                                   |

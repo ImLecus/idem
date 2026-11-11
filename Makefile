@@ -8,6 +8,7 @@
 #   make            build the compiler when src/*.c exists
 #   make runtime    build build/libidemrt.a when runtime/*.c exists
 #   make test       build and run the unit tests
+#   make golden     compile and run the golden tests
 #   make check      clean rebuild
 #   make dirs       create the directory skeleton
 #   make clean      remove build artifacts
@@ -18,6 +19,8 @@ CFLAGS   ?= -std=c89 -pedantic -Wall -Wextra -O2 -g
 CPPFLAGS ?=
 LDFLAGS  ?=
 LDLIBS   ?= -lm
+
+RUNTIME_DIR_ABS := $(abspath runtime)
 
 BIN         := idem
 BUILD       := build
@@ -35,9 +38,9 @@ UNIT_SRC    := $(wildcard tests/unit/*.c)
 UNIT_OBJ    := $(patsubst tests/unit/%.c,$(BUILD)/unit/%.o,$(UNIT_SRC))
 UNIT_BIN    := $(BUILD)/unit-tests
 
-.PHONY: all compiler runtime test check dirs clean help
+.PHONY: all compiler runtime test check dirs clean help golden
 
-all: compiler
+all: compiler runtime
 
 compiler: $(BIN)
 
@@ -51,6 +54,8 @@ $(BIN): $(OBJ)
 $(OBJDIR)/%.o: src/%.c
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/main.o: CPPFLAGS += -DIDEM_RUNTIME_DIR=\"$(RUNTIME_DIR_ABS)\"
 
 runtime: $(RUNTIME_LIB)
 
@@ -66,12 +71,15 @@ $(RUNTIME_DIR)/%.o: runtime/%.c
 	@mkdir -p $(RUNTIME_DIR)
 	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
 
-test: compiler $(UNIT_BIN)
+test: compiler runtime $(UNIT_BIN)
 	@if [ -x "$(UNIT_BIN)" ]; then \
 		"$(UNIT_BIN)"; \
 	else \
 		echo "test: no unit tests yet"; \
 	fi
+
+golden: compiler
+	@sh tests/run_golden.sh
 
 $(UNIT_BIN): $(UNIT_OBJ) $(CORE_OBJ)
 	@if [ -z "$(UNIT_SRC)" ]; then \
@@ -99,6 +107,7 @@ help:
 	@echo "  compiler       same as all"
 	@echo "  runtime        build build/libidemrt.a when runtime/*.c exists"
 	@echo "  test           build and run unit tests from tests/unit/"
+	@echo "  golden         compile and run golden tests from tests/golden/"
 	@echo "  check          clean rebuild of the compiler"
 	@echo "  dirs           create the directory skeleton"
 	@echo "  clean          remove build artifacts"

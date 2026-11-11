@@ -1,0 +1,22 @@
+fn main(args: Array[String]) -> Unit = {
+    let xs: Array[Int] = [1, 2, 3, 4]
+    let ys: List[Int] = List[10, 20, 30]
+    let m: Map[String, Int] = Map{ "one": 1, "two": 2 }
+
+    println(len(xs))
+    println(sum(xs))
+    println(map(xs, fn(x: Int) -> Int = x * 2))
+    println(filter(xs, fn(x: Int) -> Bool = x % 2 == 0))
+    println(fold(xs, 0, fn(acc: Int, x: Int) -> Int = acc + x))
+
+    println(push(ys, 40))
+    println(len(m))
+    println(get(m, "one"))
+    println(keys(m))
+    println(values(m))
+
+    let s = "hello"
+    println(len(s))
+    println(charAt(s, 1))
+    println(chars(s))
+}
