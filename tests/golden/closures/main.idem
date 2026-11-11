@@ -1,0 +1,10 @@
+fn main(args: Array[String]) -> Unit = {
+  let a = 10
+  let f = fn(x: Int) -> Int = x + a
+  let g = fn(x: Int) -> Int = f(x) * 2
+  println(f(5))
+  println(g(5))
+  let h = fn(x: Int) -> (Int -> Int) = fn(y: Int) -> Int = x + y + a
+  let k = h(3)
+  println(k(4))
+}
