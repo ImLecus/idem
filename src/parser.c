@@ -1333,6 +1333,7 @@ static AstPattern *parse_pattern_ex(Parser *p, int allow_refutable,
                         sub = new_pattern(p, PAT_VAR, field.span);
                         sub->as.var.name = field.as.ident.text;
                         sub->as.var.name_len = field.as.ident.len;
+                        sub->is_binding = 1;
                     }
 
                     pf = new_pattern_field(p);

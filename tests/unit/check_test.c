@@ -184,6 +184,19 @@ static void test_valid_program(void)
     remove("build/_check_valid.idem");
 }
 
+static void test_struct_shorthand_binding(void)
+{
+    CHECK(write_file("build/_check_shorthand.idem",
+        "enum Color { Red, Green }\n"
+        "struct S { Red: Color, other: Int }\n"
+        "fn f(s: S) -> Color = match s {\n"
+        "  S { Red, other } => Red,\n"
+        "}\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_ok("build/_check_shorthand.idem");
+    remove("build/_check_shorthand.idem");
+}
+
 static void test_errors(void)
 {
     CHECK(write_file("build/_check_arith.idem",
@@ -281,6 +294,26 @@ static void test_errors(void)
         "fn main(args: Array[String]) -> Unit = ()\n"));
     expect_error("build/_check_unreachable.idem", "unreachable pattern");
 
+    CHECK(write_file("build/_check_unreachable_dup.idem",
+        "enum E { A, B }\n"
+        "fn f(e: E) -> Int = match e { A => 1, A => 2, B => 3 }\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_error("build/_check_unreachable_dup.idem", "unreachable pattern");
+
+    CHECK(write_file("build/_check_unreachable_lit.idem",
+        "fn f(b: Bool) -> Int = match b { true => 1, _ => 0, false => 2 }\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_error("build/_check_unreachable_lit.idem", "unreachable pattern");
+
+    CHECK(write_file("build/_check_reachable_overlap.idem",
+        "fn f(p: (Bool, Bool)) -> Int = match p {\n"
+        "  (true, _) => 1,\n"
+        "  (_, true) => 2,\n"
+        "  (false, false) => 0,\n"
+        "}\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_ok("build/_check_reachable_overlap.idem");
+
     CHECK(write_file("build/_check_import_lib.idem",
         "fn bad() -> Int = \"s\"\n"));
     CHECK(write_file("build/_check_import.idem",
@@ -305,6 +338,9 @@ static void test_errors(void)
     remove("build/_check_nonex_union.idem");
     remove("build/_check_nonex_tuple.idem");
     remove("build/_check_unreachable.idem");
+    remove("build/_check_unreachable_dup.idem");
+    remove("build/_check_unreachable_lit.idem");
+    remove("build/_check_reachable_overlap.idem");
     remove("build/_check_import.idem");
     remove("build/_check_import_lib.idem");
 }
@@ -312,6 +348,7 @@ static void test_errors(void)
 int check_test_run(void)
 {
     test_valid_program();
+    test_struct_shorthand_binding();
     test_errors();
 
     if (failures != 0) {

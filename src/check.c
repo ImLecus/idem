@@ -1562,6 +1562,20 @@ static Type *check_block(TypeChecker *c, AstExpr *expr, Type *expected)
 /* Patterns                                                            */
 /* ------------------------------------------------------------------ */
 
+static int union_has_member(Type *type, Type *member)
+{
+    TypeList *it;
+    if (type == NULL || type->kind != TY_UNION) {
+        return 0;
+    }
+    for (it = type->as.union_.items; it != NULL; it = it->next) {
+        if (type_equivalent(it->type, member)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static TypeVariant *find_variant(TypeInfo *info, const char *name, size_t len)
 {
     TypeVariant *v;
@@ -1598,7 +1612,7 @@ static void check_pattern(TypeChecker *c, AstPattern *pat, Type *scrutinee,
         break;
 
     case PAT_VAR:
-        if (scrutinee->kind == TY_ENUM) {
+        if (!pat->is_binding && scrutinee->kind == TY_ENUM) {
             TypeVariant *v;
             v = find_variant(scrutinee->as.nominal.info,
                              pat->as.var.name, pat->as.var.name_len);
@@ -1811,7 +1825,7 @@ static void check_pattern(TypeChecker *c, AstPattern *pat, Type *scrutinee,
 
         member = checker_resolve_type(c, pat->as.type.type, pat->span);
         validate_type(c, member, pat->span, NULL);
-        if (!is_subtype(member, scrutinee)) {
+        if (!union_has_member(scrutinee, member)) {
             checker_error(c, pat->span,
                           "type pattern is not a member of the union");
             return;
@@ -1876,20 +1890,6 @@ static AstPatternList *copy_pattern_list(TypeChecker *c,
     return head;
 }
 
-static AstPatternList *append_pattern_list(TypeChecker *c,
-                                           AstPatternList *head,
-                                           AstPatternList *tail,
-                                           AstPatternList *rest)
-{
-    AstPatternList *copy;
-    copy = copy_pattern_list(c, rest);
-    if (head == NULL) {
-        return copy;
-    }
-    tail->next = copy;
-    return head;
-}
-
 static TypeList *append_type_list(TypeChecker *c, TypeList *head,
                                   TypeList *rest)
 {
@@ -1934,6 +1934,54 @@ static void cover_row_add(TypeChecker *c, CoverRow **head, CoverRow **tail,
     *tail = row;
 }
 
+static AstPatternList *concat_pattern_lists(TypeChecker *c,
+                                            AstPatternList *first,
+                                            AstPatternList *second)
+{
+    AstPatternList *head;
+    AstPatternList *tail;
+    AstPatternList *n;
+
+    head = NULL;
+    tail = NULL;
+
+    while (first != NULL) {
+        n = pattern_list_node(c, first->pattern, NULL);
+        if (tail != NULL) {
+            tail->next = n;
+        } else {
+            head = n;
+        }
+        tail = n;
+        first = first->next;
+    }
+
+    while (second != NULL) {
+        n = pattern_list_node(c, second->pattern, NULL);
+        if (tail != NULL) {
+            tail->next = n;
+        } else {
+            head = n;
+        }
+        tail = n;
+        second = second->next;
+    }
+
+    return head;
+}
+
+static void cover_row_add_payload(TypeChecker *c, CoverRow **head,
+                                  CoverRow **tail, AstPatternList *payload,
+                                  AstPatternList *rest)
+{
+    cover_row_add(c, head, tail, concat_pattern_lists(c, payload, rest));
+}
+
+static TypeList *struct_field_types(TypeChecker *c, TypeInfo *info);
+static AstPatternList *struct_pattern_payload(TypeChecker *c,
+                                              AstPattern *pat,
+                                              TypeInfo *info);
+
 static int pattern_is_variable(Type *type, AstPattern *pat)
 {
     TypeVariant *v;
@@ -1942,6 +1990,9 @@ static int pattern_is_variable(Type *type, AstPattern *pat)
     }
     if (pat->kind != PAT_VAR) {
         return 0;
+    }
+    if (pat->is_binding) {
+        return 1;
     }
     if (type != NULL && type->kind == TY_ENUM) {
         v = find_variant(type->as.nominal.info,
@@ -1991,7 +2042,7 @@ static int pattern_is_irrefutable(TypeChecker *c, Type *type,
     case PAT_WILDCARD:
         return 1;
     case PAT_VAR:
-        if (type->kind == TY_ENUM) {
+        if (!pat->is_binding && type->kind == TY_ENUM) {
             TypeVariant *v;
             v = find_variant(type->as.nominal.info,
                              pat->as.var.name, pat->as.var.name_len);
@@ -2210,7 +2261,6 @@ static int coverage_enum(TypeChecker *c, TypeList *types, CoverRow *rows)
         for (row = rows; row != NULL; row = row->next) {
             AstPattern *pat;
             AstPatternList *payload;
-            AstPatternList *patterns;
             AstPatternList *rest;
 
             pat = row->patterns->pattern;
@@ -2221,7 +2271,7 @@ static int coverage_enum(TypeChecker *c, TypeList *types, CoverRow *rows)
                 payload = wildcards_for_types(c, variant->payload,
                                               pat->span);
                 any = 1;
-            } else if (pat->kind == PAT_VAR &&
+            } else if (pat->kind == PAT_VAR && !pat->is_binding &&
                        pat->as.var.name_len == variant->name_len &&
                        memcmp(pat->as.var.name, variant->name,
                               variant->name_len) == 0) {
@@ -2237,17 +2287,7 @@ static int coverage_enum(TypeChecker *c, TypeList *types, CoverRow *rows)
                 continue;
             }
 
-            if (payload != NULL) {
-                AstPatternList *p;
-                p = payload;
-                while (p->next != NULL) {
-                    p = p->next;
-                }
-                patterns = append_pattern_list(c, payload, p, rest);
-            } else {
-                patterns = copy_pattern_list(c, rest);
-            }
-            cover_row_add(c, &head, &tail, patterns);
+            cover_row_add_payload(c, &head, &tail, payload, rest);
         }
 
         if (!any) {
@@ -2328,7 +2368,6 @@ static int coverage_tuple(TypeChecker *c, TypeList *types, CoverRow *rows)
     for (row = rows; row != NULL; row = row->next) {
         AstPattern *pat;
         AstPatternList *payload;
-        AstPatternList *patterns;
         AstPatternList *rest;
 
         pat = row->patterns->pattern;
@@ -2344,17 +2383,7 @@ static int coverage_tuple(TypeChecker *c, TypeList *types, CoverRow *rows)
             continue;
         }
 
-        if (payload != NULL) {
-            AstPatternList *p;
-            p = payload;
-            while (p->next != NULL) {
-                p = p->next;
-            }
-            patterns = append_pattern_list(c, payload, p, rest);
-        } else {
-            patterns = copy_pattern_list(c, rest);
-        }
-        cover_row_add(c, &head, &tail, patterns);
+        cover_row_add_payload(c, &head, &tail, payload, rest);
     }
 
     if (!any) {
@@ -2367,9 +2396,7 @@ static int coverage_tuple(TypeChecker *c, TypeList *types, CoverRow *rows)
 static int coverage_struct(TypeChecker *c, TypeList *types, CoverRow *rows)
 {
     TypeInfo *info;
-    TypeField *field;
     TypeList *field_types;
-    TypeList *field_types_tail;
     TypeList *all;
     CoverRow *row;
     CoverRow *head;
@@ -2377,23 +2404,7 @@ static int coverage_struct(TypeChecker *c, TypeList *types, CoverRow *rows)
     int any;
 
     info = types->type->as.nominal.info;
-    field_types = NULL;
-    field_types_tail = NULL;
-
-    for (field = info->fields; field != NULL; field = field->next) {
-        TypeList *n;
-        n = type_list_cons(c->arena, field->type, NULL);
-        if (n == NULL) {
-            fprintf(stderr, "idem: out of memory\n");
-            exit(1);
-        }
-        if (field_types_tail != NULL) {
-            field_types_tail->next = n;
-        } else {
-            field_types = n;
-        }
-        field_types_tail = n;
-    }
+    field_types = struct_field_types(c, info);
 
     head = NULL;
     tail = NULL;
@@ -2402,7 +2413,6 @@ static int coverage_struct(TypeChecker *c, TypeList *types, CoverRow *rows)
     for (row = rows; row != NULL; row = row->next) {
         AstPattern *pat;
         AstPatternList *payload;
-        AstPatternList *patterns;
         AstPatternList *rest;
 
         pat = row->patterns->pattern;
@@ -2419,44 +2429,13 @@ static int coverage_struct(TypeChecker *c, TypeList *types, CoverRow *rows)
             if (pinfo != info) {
                 continue;
             }
-            payload = NULL;
-            {
-                AstPatternList *ptail;
-                ptail = NULL;
-                for (field = info->fields; field != NULL;
-                     field = field->next) {
-                    AstPattern *sub;
-                    AstPatternList *n;
-                    sub = find_pattern_field(pat->as.struct_.fields,
-                                             field->name,
-                                             field->name_len);
-                    if (sub == NULL) {
-                        sub = new_wildcard(c, pat->span);
-                    }
-                    n = pattern_list_node(c, sub, NULL);
-                    if (ptail != NULL) {
-                        ptail->next = n;
-                    } else {
-                        payload = n;
-                    }
-                    ptail = n;
-                }
-            }
+            payload = struct_pattern_payload(c, pat, info);
             any = 1;
         } else {
             continue;
         }
 
-        patterns = copy_pattern_list(c, rest);
-        if (payload != NULL) {
-            AstPatternList *p;
-            p = payload;
-            while (p->next != NULL) {
-                p = p->next;
-            }
-            patterns = append_pattern_list(c, payload, p, rest);
-        }
-        cover_row_add(c, &head, &tail, patterns);
+        cover_row_add_payload(c, &head, &tail, payload, rest);
     }
 
     if (!any) {
@@ -2504,6 +2483,693 @@ static int coverage_rows(TypeChecker *c, TypeList *types, CoverRow *rows)
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Pattern usefulness (unreachable arm detection)                      */
+/* ------------------------------------------------------------------ */
+
+static int useful(TypeChecker *c, TypeList *types, CoverRow *rows,
+                  AstPatternList *q);
+
+static int pattern_list_length(AstPatternList *list)
+{
+    int n;
+
+    n = 0;
+    while (list != NULL) {
+        n += 1;
+        list = list->next;
+    }
+    return n;
+}
+
+static int type_list_length(TypeList *list)
+{
+    int n;
+
+    n = 0;
+    while (list != NULL) {
+        n += 1;
+        list = list->next;
+    }
+    return n;
+}
+
+static int literal_equal(AstExpr *a, AstExpr *b)
+{
+    if (a == NULL || b == NULL || a->kind != b->kind) {
+        return 0;
+    }
+
+    switch (a->kind) {
+    case EXPR_INT:
+        return a->as.int_lit.value.w[0] == b->as.int_lit.value.w[0] &&
+               a->as.int_lit.value.w[1] == b->as.int_lit.value.w[1] &&
+               a->as.int_lit.value.w[2] == b->as.int_lit.value.w[2] &&
+               a->as.int_lit.value.w[3] == b->as.int_lit.value.w[3];
+    case EXPR_FLOAT:
+        return a->as.float_lit.value == b->as.float_lit.value;
+    case EXPR_BOOL:
+        return a->as.bool_lit.value == b->as.bool_lit.value;
+    case EXPR_CHAR:
+        return a->as.char_lit.codepoint == b->as.char_lit.codepoint;
+    case EXPR_STRING:
+    case EXPR_BYTES:
+        if (a->as.str_lit.len != b->as.str_lit.len) {
+            return 0;
+        }
+        if (a->as.str_lit.len == 0) {
+            return 1;
+        }
+        return memcmp(a->as.str_lit.data, b->as.str_lit.data,
+                      a->as.str_lit.len) == 0;
+    default:
+        return 0;
+    }
+}
+
+static TypeList *struct_field_types(TypeChecker *c, TypeInfo *info)
+{
+    TypeField *field;
+    TypeList *head;
+    TypeList *tail;
+    TypeList *n;
+
+    head = NULL;
+    tail = NULL;
+
+    for (field = info->fields; field != NULL; field = field->next) {
+        n = type_list_cons(c->arena, field->type, NULL);
+        if (n == NULL) {
+            fprintf(stderr, "idem: out of memory\n");
+            exit(1);
+        }
+        if (tail != NULL) {
+            tail->next = n;
+        } else {
+            head = n;
+        }
+        tail = n;
+    }
+
+    return head;
+}
+
+static AstPatternList *struct_pattern_payload(TypeChecker *c,
+                                              AstPattern *pat,
+                                              TypeInfo *info)
+{
+    TypeField *field;
+    AstPatternList *head;
+    AstPatternList *tail;
+    AstPatternList *n;
+
+    head = NULL;
+    tail = NULL;
+
+    for (field = info->fields; field != NULL; field = field->next) {
+        AstPattern *sub;
+
+        sub = find_pattern_field(pat->as.struct_.fields,
+                                 field->name, field->name_len);
+        if (sub == NULL) {
+            sub = new_wildcard(c, pat->span);
+        }
+
+        n = pattern_list_node(c, sub, NULL);
+        if (tail != NULL) {
+            tail->next = n;
+        } else {
+            head = n;
+        }
+        tail = n;
+    }
+
+    return head;
+}
+
+static int bool_signature_complete(CoverRow *rows)
+{
+    int seen_true;
+    int seen_false;
+    CoverRow *row;
+
+    seen_true = 0;
+    seen_false = 0;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+
+        pat = row->patterns->pattern;
+        if (pat->kind == PAT_LITERAL &&
+            pat->as.literal.literal->kind == EXPR_BOOL) {
+            if (pat->as.literal.literal->as.bool_lit.value) {
+                seen_true = 1;
+            } else {
+                seen_false = 1;
+            }
+        }
+    }
+
+    return seen_true && seen_false;
+}
+
+static int enum_signature_complete(CoverRow *rows, TypeInfo *info)
+{
+    TypeVariant *variant;
+
+    for (variant = info->variants; variant != NULL;
+         variant = variant->next) {
+        CoverRow *row;
+        int found;
+
+        found = 0;
+        for (row = rows; row != NULL; row = row->next) {
+            AstPattern *pat;
+
+            pat = row->patterns->pattern;
+            if (pat->kind == PAT_ENUM &&
+                pat->as.enum_.name_len == variant->name_len &&
+                memcmp(pat->as.enum_.name, variant->name,
+                       variant->name_len) == 0) {
+                found = 1;
+                break;
+            }
+            if (pat->kind == PAT_VAR && !pat->is_binding &&
+                pat->as.var.name_len == variant->name_len &&
+                memcmp(pat->as.var.name, variant->name,
+                       variant->name_len) == 0) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int union_member_pattern(TypeChecker *c, AstPattern *pat,
+                                Type *member)
+{
+    Type *pt;
+
+    if (pat->kind != PAT_TYPE) {
+        return 0;
+    }
+
+    pt = resolver_resolve_type(c->resolver, c->module,
+                               pat->as.type.type);
+    if (pt->kind == TY_ERROR) {
+        return 0;
+    }
+    return type_equivalent(pt, member);
+}
+
+static int union_signature_complete(TypeChecker *c, CoverRow *rows,
+                                    Type *union_type)
+{
+    TypeList *member;
+
+    for (member = union_type->as.union_.items; member != NULL;
+         member = member->next) {
+        CoverRow *row;
+        int found;
+
+        found = 0;
+        for (row = rows; row != NULL; row = row->next) {
+            if (union_member_pattern(c, row->patterns->pattern,
+                                     member->type)) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static CoverRow *default_matrix(TypeChecker *c, Type *type, CoverRow *rows)
+{
+    CoverRow *head;
+    CoverRow *tail;
+    CoverRow *row;
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        if (pattern_is_variable(type, row->patterns->pattern)) {
+            cover_row_add(c, &head, &tail,
+                          copy_pattern_list(c, row_rest(row)));
+        }
+    }
+
+    return head;
+}
+
+static int useful_bool_value(TypeChecker *c, TypeList *types,
+                             CoverRow *rows, AstPatternList *q_rest,
+                             int value)
+{
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat) ||
+            (pat->kind == PAT_LITERAL &&
+             pat->as.literal.literal->kind == EXPR_BOOL &&
+             pat->as.literal.literal->as.bool_lit.value == value)) {
+            cover_row_add(c, &head, &tail,
+                          copy_pattern_list(c, row_rest(row)));
+        }
+    }
+
+    return useful(c, types->next, head, q_rest);
+}
+
+static int useful_unit(TypeChecker *c, TypeList *types, CoverRow *rows,
+                       AstPatternList *q_rest)
+{
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat) ||
+            pat->kind == PAT_UNIT) {
+            cover_row_add(c, &head, &tail,
+                          copy_pattern_list(c, row_rest(row)));
+        }
+    }
+
+    return useful(c, types->next, head, q_rest);
+}
+
+static int useful_enum_variant(TypeChecker *c, TypeList *types,
+                               CoverRow *rows, AstPatternList *q_rest,
+                               TypeVariant *variant,
+                               AstPatternList *payload)
+{
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+    TypeList *all_types;
+    AstPatternList *all_patterns;
+
+    if (pattern_list_length(payload) !=
+        type_list_length(variant->payload)) {
+        return 1;
+    }
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+        AstPatternList *row_payload;
+
+        pat = row->patterns->pattern;
+        row_payload = NULL;
+
+        if (pattern_is_variable(types->type, pat)) {
+            row_payload = wildcards_for_types(c, variant->payload,
+                                              pat->span);
+        } else if (pat->kind == PAT_ENUM &&
+                   pat->as.enum_.name_len == variant->name_len &&
+                   memcmp(pat->as.enum_.name, variant->name,
+                          variant->name_len) == 0) {
+            row_payload = pat->as.enum_.payload;
+        } else if (pat->kind == PAT_VAR && !pat->is_binding &&
+                   pat->as.var.name_len == variant->name_len &&
+                   memcmp(pat->as.var.name, variant->name,
+                          variant->name_len) == 0) {
+            row_payload = NULL;
+        } else {
+            continue;
+        }
+
+        cover_row_add_payload(c, &head, &tail, row_payload, row_rest(row));
+    }
+
+    all_types = append_type_list(c, variant->payload, types->next);
+    all_patterns = concat_pattern_lists(c, payload, q_rest);
+    return useful(c, all_types, head, all_patterns);
+}
+
+static int useful_union_member(TypeChecker *c, TypeList *types,
+                               CoverRow *rows, AstPatternList *q_rest,
+                               Type *member)
+{
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat) ||
+            union_member_pattern(c, pat, member)) {
+            cover_row_add(c, &head, &tail,
+                          copy_pattern_list(c, row_rest(row)));
+        }
+    }
+
+    return useful(c, types->next, head, q_rest);
+}
+
+static int useful_tuple_pattern(TypeChecker *c, TypeList *types,
+                                CoverRow *rows, AstPatternList *q_rest,
+                                AstPatternList *payload)
+{
+    TypeList *items;
+    TypeList *all;
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    items = types->type->as.tuple.items;
+    if (pattern_list_length(payload) != type_list_length(items)) {
+        return 1;
+    }
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+        AstPatternList *row_payload;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat)) {
+            row_payload = wildcards_for_types(c, items, pat->span);
+        } else if (pat->kind == PAT_TUPLE) {
+            row_payload = pat->as.tuple.items;
+        } else {
+            continue;
+        }
+
+        cover_row_add_payload(c, &head, &tail, row_payload,
+                              row_rest(row));
+    }
+
+    all = append_type_list(c, items, types->next);
+    return useful(c, all, head, concat_pattern_lists(c, payload, q_rest));
+}
+
+static int useful_struct_pattern(TypeChecker *c, TypeList *types,
+                                 CoverRow *rows, AstPatternList *q_rest,
+                                 TypeList *field_types,
+                                 AstPatternList *payload)
+{
+    TypeInfo *info;
+    TypeList *all;
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    info = types->type->as.nominal.info;
+    if (pattern_list_length(payload) != type_list_length(field_types)) {
+        return 1;
+    }
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+        AstPatternList *row_payload;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat)) {
+            row_payload = wildcards_for_types(c, field_types, pat->span);
+        } else if (pat->kind == PAT_STRUCT) {
+            TypeInfo *pinfo;
+
+            pinfo = lookup_struct_info(c, pat->as.struct_.name,
+                                       pat->as.struct_.name_len,
+                                       pat->span);
+            if (pinfo != info) {
+                continue;
+            }
+            row_payload = struct_pattern_payload(c, pat, info);
+        } else {
+            continue;
+        }
+
+        cover_row_add_payload(c, &head, &tail, row_payload,
+                              row_rest(row));
+    }
+
+    all = append_type_list(c, field_types, types->next);
+    return useful(c, all, head, concat_pattern_lists(c, payload, q_rest));
+}
+
+static int useful_literal_value(TypeChecker *c, TypeList *types,
+                                CoverRow *rows, AstPatternList *q_rest,
+                                AstExpr *literal)
+{
+    CoverRow *row;
+    CoverRow *head;
+    CoverRow *tail;
+
+    head = NULL;
+    tail = NULL;
+
+    for (row = rows; row != NULL; row = row->next) {
+        AstPattern *pat;
+
+        pat = row->patterns->pattern;
+        if (pattern_is_variable(types->type, pat) ||
+            (pat->kind == PAT_LITERAL &&
+             literal_equal(pat->as.literal.literal, literal))) {
+            cover_row_add(c, &head, &tail,
+                          copy_pattern_list(c, row_rest(row)));
+        }
+    }
+
+    return useful(c, types->next, head, q_rest);
+}
+
+static int useful(TypeChecker *c, TypeList *types, CoverRow *rows,
+                  AstPatternList *q)
+{
+    Type *type;
+    AstPattern *q1;
+    AstPatternList *q_rest;
+
+    if (types == NULL && q == NULL) {
+        return rows == NULL;
+    }
+    if (types == NULL || q == NULL) {
+        return 1;
+    }
+
+    type = types->type;
+    q1 = q->pattern;
+    q_rest = q->next;
+
+    if (type == NULL || type->kind == TY_ERROR) {
+        return 1;
+    }
+    if (type->kind == TY_NEVER) {
+        return 0;
+    }
+
+    if (pattern_is_variable(type, q1)) {
+        switch (type->kind) {
+        case TY_BOOL: {
+            int value;
+
+            if (!bool_signature_complete(rows)) {
+                return useful(c, types->next,
+                              default_matrix(c, type, rows), q_rest);
+            }
+            for (value = 0; value <= 1; value++) {
+                if (useful_bool_value(c, types, rows, q_rest, value)) {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        case TY_UNIT:
+            return useful_unit(c, types, rows, q_rest);
+        case TY_ENUM: {
+            TypeVariant *variant;
+            TypeInfo *info;
+
+            info = type->as.nominal.info;
+            if (!enum_signature_complete(rows, info)) {
+                return useful(c, types->next,
+                              default_matrix(c, type, rows), q_rest);
+            }
+            for (variant = info->variants; variant != NULL;
+                 variant = variant->next) {
+                AstPatternList *payload;
+                payload = wildcards_for_types(c, variant->payload,
+                                              q1->span);
+                if (useful_enum_variant(c, types, rows, q_rest, variant,
+                                        payload)) {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        case TY_UNION: {
+            TypeList *member;
+
+            if (!union_signature_complete(c, rows, type)) {
+                return useful(c, types->next,
+                              default_matrix(c, type, rows), q_rest);
+            }
+            for (member = type->as.union_.items; member != NULL;
+                 member = member->next) {
+                if (useful_union_member(c, types, rows, q_rest,
+                                        member->type)) {
+                    return 1;
+                }
+            }
+            return 0;
+        }
+        case TY_TUPLE: {
+            AstPatternList *payload;
+            payload = wildcards_for_types(c, type->as.tuple.items,
+                                          q1->span);
+            return useful_tuple_pattern(c, types, rows, q_rest, payload);
+        }
+        case TY_STRUCT: {
+            TypeList *field_types;
+            AstPatternList *payload;
+
+            field_types = struct_field_types(c, type->as.nominal.info);
+            payload = wildcards_for_types(c, field_types, q1->span);
+            return useful_struct_pattern(c, types, rows, q_rest,
+                                         field_types, payload);
+        }
+        default:
+            return useful(c, types->next,
+                          default_matrix(c, type, rows), q_rest);
+        }
+    }
+
+    switch (type->kind) {
+    case TY_BOOL: {
+        int value;
+
+        if (q1->kind != PAT_LITERAL ||
+            q1->as.literal.literal->kind != EXPR_BOOL) {
+            return 1;
+        }
+        value = q1->as.literal.literal->as.bool_lit.value;
+        return useful_bool_value(c, types, rows, q_rest, value);
+    }
+    case TY_UNIT:
+        if (q1->kind != PAT_UNIT) {
+            return 1;
+        }
+        return useful_unit(c, types, rows, q_rest);
+    case TY_ENUM: {
+        TypeInfo *info;
+        TypeVariant *variant;
+        AstPatternList *payload;
+
+        info = type->as.nominal.info;
+
+        if (q1->kind == PAT_ENUM) {
+            variant = find_variant(info, q1->as.enum_.name,
+                                   q1->as.enum_.name_len);
+            if (variant == NULL) {
+                return 1;
+            }
+            payload = q1->as.enum_.payload;
+            return useful_enum_variant(c, types, rows, q_rest, variant,
+                                       payload);
+        }
+
+        if (q1->kind == PAT_VAR && !q1->is_binding) {
+            variant = find_variant(info, q1->as.var.name,
+                                   q1->as.var.name_len);
+            if (variant == NULL) {
+                return 1;
+            }
+            payload = NULL;
+            return useful_enum_variant(c, types, rows, q_rest, variant,
+                                       payload);
+        }
+
+        return 1;
+    }
+    case TY_UNION: {
+        TypeList *member;
+
+        if (q1->kind != PAT_TYPE) {
+            return 1;
+        }
+        for (member = type->as.union_.items; member != NULL;
+             member = member->next) {
+            if (union_member_pattern(c, q1, member->type)) {
+                return useful_union_member(c, types, rows, q_rest,
+                                           member->type);
+            }
+        }
+        return 1;
+    }
+    case TY_TUPLE:
+        if (q1->kind != PAT_TUPLE) {
+            return 1;
+        }
+        return useful_tuple_pattern(c, types, rows, q_rest,
+                                    q1->as.tuple.items);
+    case TY_STRUCT: {
+        TypeInfo *info;
+        TypeInfo *pinfo;
+        TypeList *field_types;
+        AstPatternList *payload;
+
+        if (q1->kind != PAT_STRUCT) {
+            return 1;
+        }
+        info = type->as.nominal.info;
+        pinfo = lookup_struct_info(c, q1->as.struct_.name,
+                                   q1->as.struct_.name_len, q1->span);
+        if (pinfo != info) {
+            return 1;
+        }
+        field_types = struct_field_types(c, info);
+        payload = struct_pattern_payload(c, q1, info);
+        return useful_struct_pattern(c, types, rows, q_rest,
+                                     field_types, payload);
+    }
+    default:
+        if (q1->kind != PAT_LITERAL) {
+            return 1;
+        }
+        return useful_literal_value(c, types, rows, q_rest,
+                                    q1->as.literal.literal);
+    }
+}
+
 static void check_match_reachable(TypeChecker *c, AstExpr *expr,
                                   Type *scrutinee)
 {
@@ -2523,12 +3189,11 @@ static void check_match_reachable(TypeChecker *c, AstExpr *expr,
     for (arm = expr->as.match.arms; arm != NULL; arm = arm->next) {
         AstPatternList *patterns;
 
-        if (head != NULL && coverage_rows(c, types, head)) {
+        patterns = pattern_list_node(c, arm->pattern, NULL);
+        if (!useful(c, types, head, patterns)) {
             checker_error(c, arm->span, "unreachable pattern");
             return;
         }
-
-        patterns = pattern_list_node(c, arm->pattern, NULL);
         cover_row_add(c, &head, &tail, patterns);
     }
 }

@@ -274,6 +274,7 @@ typedef enum AstPatternKind {
 struct AstPattern {
     AstPatternKind kind;
     Span span;
+    int is_binding; /* struct-pattern shorthand is always a binding */
     union {
         struct {
             const char *name;
