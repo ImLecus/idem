@@ -13,7 +13,9 @@ fn main(args: Array[String]) -> Unit = {
 
 ## Status
 
-The language design is closed for version 0.1. The reference compiler is a work in progress. The normative specification is in [docs/language.md](docs/language.md), and the compiler implementation guide is in [docs/compiler.md](docs/compiler.md).
+The language design is closed for version 0.1. The C89 **lexer is implemented** and covered by unit tests. The parser, type checker, and code generator are still pending. The current `idem` binary dumps the token stream of a source file.
+
+The normative specification is in [docs/language.md](docs/language.md), and the compiler implementation guide is in [docs/compiler.md](docs/compiler.md).
 
 ## Design highlights
 
@@ -28,25 +30,32 @@ The language design is closed for version 0.1. The reference compiler is a work 
 ## Repository layout
 
 ```
-src/        C89 compiler sources (to be implemented)
-runtime/    C89 runtime and garbage collector (to be implemented)
-tests/      unit tests and golden tests
+src/        C89 compiler sources (lexer implemented)
+runtime/    C89 runtime and garbage collector (skeleton)
+tests/      unit tests, golden tests, and error tests
 examples/   example Idem programs
 docs/       language specification and compiler guide
 private/    design notes and decision log
-Makefile    build and test entry points (to be added with the compiler)
+Makefile    C89 build system
 LICENSE     MIT
 ```
 
 ## Build
 
-The compiler is not implemented yet. Once it is, the intended interface is:
+```
+make            # builds ./idem
+make test       # builds and runs the unit tests
+make help       # lists all targets
+```
+
+The current interface dumps tokens:
 
 ```
-make
-make test
 ./idem examples/hello.idem
 ```
+
+The eventual interface will compile and run Idem programs with the same
+command.
 
 ## Documentation
 

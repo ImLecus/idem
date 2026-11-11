@@ -1,1 +1,7 @@
 private
+
+# Build artifacts
+/idem
+/build/
+*.o
+*.d
