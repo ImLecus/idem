@@ -255,8 +255,38 @@ int type_equal(const Type *a, const Type *b)
     case TY_FUNCTION:
         return type_list_equal(a->as.fn.params, b->as.fn.params) &&
                type_equal(a->as.fn.result, b->as.fn.result);
-    case TY_UNION:
-        return type_list_equal(a->as.union_.items, b->as.union_.items);
+    case TY_UNION: {
+        TypeList *x;
+        TypeList *y;
+        int count_a;
+        int count_b;
+
+        count_a = 0;
+        for (x = a->as.union_.items; x != NULL; x = x->next) {
+            count_a += 1;
+        }
+        count_b = 0;
+        for (y = b->as.union_.items; y != NULL; y = y->next) {
+            count_b += 1;
+        }
+        if (count_a != count_b) {
+            return 0;
+        }
+        for (x = a->as.union_.items; x != NULL; x = x->next) {
+            int found;
+            found = 0;
+            for (y = b->as.union_.items; y != NULL; y = y->next) {
+                if (type_equal(x->type, y->type)) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (!found) {
+                return 0;
+            }
+        }
+        return 1;
+    }
     case TY_STRUCT:
     case TY_ENUM:
         return a->as.nominal.info == b->as.nominal.info;
@@ -296,6 +326,16 @@ static void append_str(char **p, char *end, const char *s)
         **p = *s;
         *p += 1;
         s += 1;
+    }
+}
+
+static void append_nstr(char **p, char *end, const char *s, size_t n)
+{
+    while (s != NULL && n > 0 && *p < end) {
+        **p = *s;
+        *p += 1;
+        s += 1;
+        n -= 1;
     }
 }
 
@@ -366,7 +406,8 @@ static void format_type(const Type *type, char **p, char *end)
         break;
     case TY_STRUCT:
     case TY_ENUM:
-        append_str(p, end, type->as.nominal.info->name);
+        append_nstr(p, end, type->as.nominal.info->name,
+                    type->as.nominal.info->name_len);
         break;
     default:
         append_str(p, end, type_kind_name(type->kind));
