@@ -1,0 +1,55 @@
+type AU = Array[Int] | Array[String]
+type LU = List[Int] | List[String]
+type MU = Map[String, Int] | Map[Int, String]
+type TU = (Int, Bool) | (Bool, Int)
+type FU = (Int -> Int) | (String -> String)
+
+fn arr(u: AU) -> String = match u {
+  a: Array[Int] => "ints",
+  b: Array[String] => "strings",
+}
+fn lst(u: LU) -> String = match u {
+  a: List[Int] => "ints",
+  b: List[String] => "strings",
+}
+fn mp(u: MU) -> String = match u {
+  a: Map[String, Int] => "si",
+  b: Map[Int, String] => "is",
+}
+fn tup(u: TU) -> String = match u {
+  a: (Int, Bool) => "ib",
+  b: (Bool, Int) => "bi",
+}
+fn fun(u: FU) -> String = match u {
+  a: (Int -> Int) => "ii",
+  b: (String -> String) => "ss",
+}
+
+fn main(args: Array[String]) -> Unit = {
+  let ai: Array[Int] = []
+  let as: Array[String] = []
+  let an: AU = ai
+  let bn: AU = as
+  println(arr(an))
+  println(arr(bn))
+  let li: List[Int] = List[]
+  let ls: List[String] = List[]
+  println(lst(li))
+  println(lst(ls))
+  let mi0: Map[String, Int] = Map{}
+  let ms0: Map[Int, String] = Map{}
+  let mi: MU = mi0
+  let ms: MU = ms0
+  println(mp(mi))
+  println(mp(ms))
+  let ti: TU = (1, true)
+  let tb: TU = (true, 1)
+  println(tup(ti))
+  println(tup(tb))
+  let fi: FU = fn(x: Int) -> Int = x
+  let fs: FU = fn(s: String) -> String = s
+  println(fun(fi))
+  println(fun(fs))
+  let mapped: AU = map(ai, fn(x: Int) -> Int = x + 1)
+  println(arr(mapped))
+}
