@@ -90,12 +90,12 @@ Arena allocation is freed all at once when compilation finishes. This keeps the 
 ```
 src/
     main.c          driver and CLI
-    platform.h      integer typedefs and compiler abstraction
+    platform.c/.h   integer typedefs, helpers, compiler abstraction
     arena.c/.h      arena allocator
-    string.c/.h     string interner and growable buffers
+    string.c/.h     string interner and growable buffers (future)
     lexer.c/.h      UTF-8 lexer
-    token.h         token kinds and spans
-    ast.c/.h        AST node definitions
+    token.c/.h      token kinds, spans, and token names
+    ast.c/.h        AST node definitions and dumper
     parser.c/.h     recursive-descent parser
     resolver.c/.h   imports, top-level names, aliases, signatures
     types.c/.h      type representation, unions, subtyping, joins
