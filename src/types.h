@@ -109,5 +109,6 @@ TypeVariant *type_variant_new(Arena *arena, const char *name,
 
 int type_equal(const Type *a, const Type *b);
 const char *type_kind_name(TypeKind kind);
+void type_format(const Type *type, char *buf, size_t cap);
 
 #endif /* IDEM_TYPES_H */

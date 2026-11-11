@@ -221,3 +221,101 @@ const char *type_kind_name(TypeKind kind)
     }
     return "Unknown";
 }
+
+static void append_str(char **p, char *end, const char *s)
+{
+    while (s != NULL && *s != '\0' && *p < end) {
+        **p = *s;
+        *p += 1;
+        s += 1;
+    }
+}
+
+static void append_char(char **p, char *end, char c)
+{
+    if (*p < end) {
+        **p = c;
+        *p += 1;
+    }
+}
+
+static void format_type(const Type *type, char **p, char *end);
+
+static void format_type_list(const TypeList *list, char **p, char *end,
+                             const char *separator)
+{
+    const TypeList *it;
+    int first;
+
+    first = 1;
+    for (it = list; it != NULL; it = it->next) {
+        if (!first) {
+            append_str(p, end, separator);
+        }
+        format_type(it->type, p, end);
+        first = 0;
+    }
+}
+
+static void format_type(const Type *type, char **p, char *end)
+{
+    if (type == NULL) {
+        append_str(p, end, "<null>");
+        return;
+    }
+
+    switch (type->kind) {
+    case TY_ARRAY:
+        append_str(p, end, "Array[");
+        format_type(type->as.array.element, p, end);
+        append_char(p, end, ']');
+        break;
+    case TY_LIST:
+        append_str(p, end, "List[");
+        format_type(type->as.list.element, p, end);
+        append_char(p, end, ']');
+        break;
+    case TY_MAP:
+        append_str(p, end, "Map[");
+        format_type(type->as.map.key, p, end);
+        append_str(p, end, ", ");
+        format_type(type->as.map.value, p, end);
+        append_char(p, end, ']');
+        break;
+    case TY_TUPLE:
+        append_char(p, end, '(');
+        format_type_list(type->as.tuple.items, p, end, ", ");
+        append_char(p, end, ')');
+        break;
+    case TY_FUNCTION:
+        append_char(p, end, '(');
+        format_type_list(type->as.fn.params, p, end, ", ");
+        append_str(p, end, ") -> ");
+        format_type(type->as.fn.result, p, end);
+        break;
+    case TY_UNION:
+        format_type_list(type->as.union_.items, p, end, " | ");
+        break;
+    case TY_STRUCT:
+    case TY_ENUM:
+        append_str(p, end, type->as.nominal.info->name);
+        break;
+    default:
+        append_str(p, end, type_kind_name(type->kind));
+        break;
+    }
+}
+
+void type_format(const Type *type, char *buf, size_t cap)
+{
+    char *p;
+    char *end;
+
+    if (cap == 0) {
+        return;
+    }
+    p = buf;
+    end = buf + cap - 1;
+    format_type(type, &p, end);
+    *p = '\0';
+}

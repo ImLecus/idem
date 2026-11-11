@@ -4,6 +4,7 @@
 
 #include "arena.h"
 #include "ast.h"
+#include "check.h"
 #include "lexer.h"
 #include "platform.h"
 #include "resolver.h"
@@ -161,6 +162,22 @@ int main(int argc, char **argv)
                     resolver_error_message(&resolver));
             arena_free(&arena);
             return 1;
+        }
+
+        {
+            TypeChecker checker;
+
+            checker_init(&checker, &resolver, &arena);
+            if (!checker_check_program(&checker)) {
+                span = checker_error_span(&checker);
+                fprintf(stderr, "%s:%lu:%lu: error: %s\n",
+                        span.file != NULL ? span.file : path,
+                        (unsigned long)span.line,
+                        (unsigned long)span.column,
+                        checker_error_message(&checker));
+                arena_free(&arena);
+                return 1;
+            }
         }
 
         ast_dump_program(resolver_root(&resolver)->ast);

@@ -286,6 +286,11 @@ static int is_reserved_name(const char *name, size_t len)
     return 0;
 }
 
+int resolver_is_reserved_name(const char *name, size_t name_len)
+{
+    return is_reserved_name(name, name_len);
+}
+
 static int primitive_kind(const char *name, size_t len)
 {
     if (name_eq(name, len, "Any")) {

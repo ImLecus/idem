@@ -117,6 +117,7 @@ Module *resolver_root(Resolver *r);
 Symbol *resolver_lookup(Resolver *r, Module *module,
                         const char *name, size_t name_len);
 Type *resolver_resolve_type(Resolver *r, Module *module, AstType *type);
+int resolver_is_reserved_name(const char *name, size_t name_len);
 
 int resolver_had_error(const Resolver *r);
 Span resolver_error_span(const Resolver *r);
