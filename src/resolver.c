@@ -991,8 +991,9 @@ static Type *resolve_type(Resolver *r, Module *m, AstType *type)
                              resolve_type(r, m, type->as.fn.result));
 
     case TYPE_UNION:
-        return type_union(r->arena,
-                          resolve_type_list(r, m, type->as.union_.items));
+        return type_union_normalized(r->arena,
+                                     resolve_type_list(r, m,
+                                                       type->as.union_.items));
     }
 
     return r->ty_error;

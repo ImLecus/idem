@@ -94,6 +94,74 @@ Type *type_union(Arena *arena, TypeList *items)
     return t;
 }
 
+static void union_add_normalized(Arena *arena, Type *type,
+                                 TypeList **head, TypeList **tail,
+                                 int *has_any)
+{
+    TypeList *it;
+
+    if (type == NULL) {
+        return;
+    }
+    if (type->kind == TY_NEVER) {
+        return;
+    }
+    if (type->kind == TY_ANY) {
+        *has_any = 1;
+        return;
+    }
+    if (type->kind == TY_UNION) {
+        for (it = type->as.union_.items; it != NULL; it = it->next) {
+            union_add_normalized(arena, it->type, head, tail, has_any);
+        }
+        return;
+    }
+
+    for (it = *head; it != NULL; it = it->next) {
+        if (type_equal(it->type, type)) {
+            return;
+        }
+    }
+
+    it = type_list_cons(arena, type, NULL);
+    if (it == NULL) {
+        return;
+    }
+    if (*tail != NULL) {
+        (*tail)->next = it;
+    } else {
+        *head = it;
+    }
+    *tail = it;
+}
+
+Type *type_union_normalized(Arena *arena, TypeList *items)
+{
+    TypeList *head;
+    TypeList *tail;
+    int has_any;
+
+    head = NULL;
+    tail = NULL;
+    has_any = 0;
+
+    while (items != NULL) {
+        union_add_normalized(arena, items->type, &head, &tail, &has_any);
+        items = items->next;
+    }
+
+    if (has_any) {
+        return type_new(arena, TY_ANY);
+    }
+    if (head == NULL) {
+        return type_new(arena, TY_NEVER);
+    }
+    if (head->next == NULL) {
+        return head->type;
+    }
+    return type_union(arena, head);
+}
+
 TypeInfo *type_info_new(Arena *arena, TypeKind kind, u32 id,
                         const char *name, size_t name_len)
 {

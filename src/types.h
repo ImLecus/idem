@@ -100,6 +100,7 @@ Type *type_map(Arena *arena, Type *key, Type *value);
 Type *type_tuple(Arena *arena, TypeList *items);
 Type *type_function(Arena *arena, TypeList *params, Type *result);
 Type *type_union(Arena *arena, TypeList *items);
+Type *type_union_normalized(Arena *arena, TypeList *items);
 TypeInfo *type_info_new(Arena *arena, TypeKind kind, u32 id,
                         const char *name, size_t name_len);
 TypeField *type_field_new(Arena *arena, const char *name, size_t name_len,
