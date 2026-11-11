@@ -117,6 +117,7 @@ runtime/
 tests/
     unit/           lexer, parser, types, checker tests
     golden/         .idem programs with expected output
+    errors/         .idem programs with expected diagnostics
 examples/
 docs/
 private/

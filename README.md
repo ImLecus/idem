@@ -28,23 +28,32 @@ The language design is closed for version 0.1. The reference compiler is a work 
 ## Repository layout
 
 ```
-src/        C89 compiler sources (to be implemented)
-runtime/    C89 runtime and garbage collector (to be implemented)
-tests/      unit tests and golden tests
+src/        C89 compiler sources (skeleton)
+runtime/    C89 runtime and garbage collector (skeleton)
+tests/      unit tests, golden tests, and error tests (skeleton)
 examples/   example Idem programs
 docs/       language specification and compiler guide
 private/    design notes and decision log
-Makefile    build and test entry points (to be added with the compiler)
+Makefile    C89 build system
 LICENSE     MIT
 ```
 
 ## Build
 
-The compiler is not implemented yet. Once it is, the intended interface is:
+The compiler is not implemented yet. The build system is ready and discovers
+sources with `wildcard`:
 
 ```
-make
-make test
+make            # reports that src/ has no sources yet
+make runtime    # reports that runtime/ has no sources yet
+make test       # reports that the test runner is not implemented yet
+make help       # lists all targets
+```
+
+Once the first sources exist, `make` builds `./idem`. The intended interface
+will be:
+
+```
 ./idem examples/hello.idem
 ```
 
