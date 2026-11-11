@@ -28,15 +28,52 @@ static void resolver_error(Resolver *r, Span span, const char *fmt, ...)
 {
     va_list ap;
     char buf[512];
+    size_t out;
+    const char *p;
 
     if (r->had_error) {
         return;
     }
 
+    out = 0;
+    p = fmt;
     va_start(ap, fmt);
-    vsprintf(buf, fmt, ap);
+
+    while (*p != '\0' && out + 1 < sizeof(buf)) {
+        if (*p != '%') {
+            buf[out++] = *p++;
+            continue;
+        }
+
+        if (p[1] == 's') {
+            const char *s;
+            s = va_arg(ap, const char *);
+            p += 2;
+            while (s != NULL && *s != '\0' && out + 1 < sizeof(buf)) {
+                buf[out++] = *s++;
+            }
+        } else if (p[1] == '.' && p[2] == '*' && p[3] == 's') {
+            int n;
+            const char *s;
+            n = va_arg(ap, int);
+            s = va_arg(ap, const char *);
+            p += 4;
+            while (n > 0 && s != NULL && *s != '\0' &&
+                   out + 1 < sizeof(buf)) {
+                buf[out++] = *s++;
+                n -= 1;
+            }
+        } else if (p[1] == '%') {
+            buf[out++] = '%';
+            p += 2;
+        } else {
+            buf[out++] = '%';
+            p += 1;
+        }
+    }
+
     va_end(ap);
-    buf[sizeof(buf) - 1] = '\0';
+    buf[out] = '\0';
 
     r->had_error = 1;
     r->error_span = span;
