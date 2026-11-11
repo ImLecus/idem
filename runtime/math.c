@@ -273,21 +273,22 @@ Value idem_pow(Value a, Value b)
 
 Value idem_random(void)
 {
+    static IdemUInt state = 0;
     static int seeded = 0;
-    IdemUInt high;
-    IdemUInt low;
 
     if (!seeded) {
-        srand((unsigned int)((unsigned long)time(NULL) ^
-                             (unsigned long)clock() ^
-                             (unsigned long)&seeded));
+        state = ((IdemUInt)time(NULL) << 32) ^
+                (IdemUInt)clock() ^ (IdemUInt)0x9E3779B97F4A7C15UL;
+        if (state == 0) {
+            state = (IdemUInt)0x9E3779B97F4A7C15UL;
+        }
         seeded = 1;
     }
 
-    high = (IdemUInt)(rand() & 0x7FFF);
-    low = (IdemUInt)(rand() & 0x7FFF);
-    return idem_int((IdemInt)((high << 30) | (low << 15) |
-                              (IdemUInt)(rand() & 0x7FFF)));
+    state ^= state << 13;
+    state ^= state >> 7;
+    state ^= state << 17;
+    return idem_int((IdemInt)state);
 }
 
 Value idem_now(void)
