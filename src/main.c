@@ -5,8 +5,8 @@
 #include "arena.h"
 #include "ast.h"
 #include "lexer.h"
-#include "parser.h"
 #include "platform.h"
+#include "resolver.h"
 #include "token.h"
 
 static unsigned char *read_file(const char *path, size_t *out_len)
@@ -131,43 +131,40 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    src = read_file(path, &len);
-    if (src == NULL) {
-        return 1;
-    }
-
-    arena_init(&arena);
-    lexer_init(&lx, path, src, len, &arena);
-
     if (tokens_only) {
         int status;
+
+        src = read_file(path, &len);
+        if (src == NULL) {
+            return 1;
+        }
+
+        arena_init(&arena);
+        lexer_init(&lx, path, src, len, &arena);
         status = dump_tokens(&lx);
         arena_free(&arena);
         free(src);
         return status;
     } else {
-        Parser parser;
-        AstProgram *program;
+        Resolver resolver;
+        Span span;
 
-        parser_init(&parser, &lx, &arena);
-        program = parser_parse_program(&parser);
+        arena_init(&arena);
+        resolver_init(&resolver, &arena);
 
-        if (parser_had_error(&parser)) {
-            Span span;
-            span = parser_error_span(&parser);
+        if (!resolver_resolve(&resolver, path)) {
+            span = resolver_error_span(&resolver);
             fprintf(stderr, "%s:%lu:%lu: error: %s\n",
-                    path,
+                    span.file != NULL ? span.file : path,
                     (unsigned long)span.line,
                     (unsigned long)span.column,
-                    parser_error_message(&parser));
+                    resolver_error_message(&resolver));
             arena_free(&arena);
-            free(src);
             return 1;
         }
 
-        ast_dump_program(program);
+        ast_dump_program(resolver_root(&resolver)->ast);
         arena_free(&arena);
-        free(src);
         return 0;
     }
 }
