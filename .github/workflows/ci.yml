@@ -37,6 +37,9 @@ jobs:
       - name: Run golden tests
         run: make CC=${{ matrix.compiler }} golden
 
+      - name: Build and run compiler benchmark
+        run: IDEM_BENCH_ITERATIONS=1 make CC=${{ matrix.compiler }} bench-compiler
+
       - name: Compile generated C with strict warnings
         run: |
           for file in examples/*.idem; do

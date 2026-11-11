@@ -32,6 +32,7 @@ The normative specification is in [docs/language.md](docs/language.md), and the 
 ```
 src/        C89 compiler sources (lexer, parser, resolver, checker, IR, codegen)
 runtime/    C89 runtime, collections, printing, I/O, and mark-sweep GC
+benchmarks/ compiler-phase and generated-program performance suite
 tests/      unit tests, golden tests, and error tests
 examples/   example Idem programs
 docs/       language specification and compiler guide
@@ -46,6 +47,7 @@ LICENSE     MIT
 make            # builds ./idem and the C89 runtime library
 make test       # builds and runs the unit tests
 make golden     # compiles and runs the golden tests
+make bench      # runs compiler-phase and runtime benchmarks
 make help       # lists all targets
 ```
 
@@ -61,6 +63,14 @@ The interface compiles, links, and runs an Idem program:
 Set `IDEM_KEEP_C=1` to keep the generated C file and its temporary
 executable for inspection. The driver uses `$CC` when set, otherwise
 `cc`.
+
+## Benchmarks
+
+`make bench` measures the compiler phases (resolver, type checker, lowering,
+and C89 emission) and runs precompiled workloads for recursion, arrays,
+strings, maps, GC, recursive enums, and closures. See
+[benchmarks/README.md](benchmarks/README.md) for the workload details and
+environment knobs.
 
 ## Documentation
 
