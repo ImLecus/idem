@@ -90,6 +90,8 @@ static int name_eq(const char *s, size_t n, const char *lit);
 static int is_builtin_function(const char *name, size_t len);
 static void check_match_exhaustive(TypeChecker *c, AstExpr *expr,
                                    Type *scrutinee);
+static void check_match_reachable(TypeChecker *c, AstExpr *expr,
+                                  Type *scrutinee);
 
 static void format_buffer(Type *type, char *buf, size_t cap)
 {
@@ -969,6 +971,10 @@ static Type *check_field_access(TypeChecker *c, AstExpr *expr,
     if (object_type->kind == TY_ERROR) {
         return c->resolver->ty_error;
     }
+    if (object_type->kind == TY_NEVER) {
+        check_expected(c, expr->span, c->resolver->ty_never, expected);
+        return c->resolver->ty_never;
+    }
     if (object_type->kind != TY_STRUCT) {
         checker_error(c, expr->span, "field access requires a struct");
         return c->resolver->ty_error;
@@ -993,6 +999,10 @@ static Type *check_index(TypeChecker *c, AstExpr *expr, Type *expected)
     Type *result;
 
     object_type = check_expr(c, expr->as.index.object, NULL);
+    if (object_type->kind == TY_NEVER) {
+        check_expected(c, expr->span, c->resolver->ty_never, expected);
+        return c->resolver->ty_never;
+    }
     check_expr(c, expr->as.index.index, c->resolver->ty_int);
 
     if (object_type->kind == TY_ARRAY) {
@@ -1026,6 +1036,10 @@ static Type *check_binary(TypeChecker *c, AstExpr *expr, Type *expected)
 
     if (left->kind == TY_ERROR || right->kind == TY_ERROR) {
         return c->resolver->ty_error;
+    }
+    if (left->kind == TY_NEVER || right->kind == TY_NEVER) {
+        check_expected(c, expr->span, c->resolver->ty_never, expected);
+        return c->resolver->ty_never;
     }
 
     if (op == BIN_AND || op == BIN_OR) {
@@ -1104,6 +1118,10 @@ static Type *check_unary(TypeChecker *c, AstExpr *expr, Type *expected)
     operand = check_expr(c, expr->as.unary.operand, NULL);
     if (operand->kind == TY_ERROR) {
         return c->resolver->ty_error;
+    }
+    if (operand->kind == TY_NEVER) {
+        check_expected(c, expr->span, c->resolver->ty_never, expected);
+        return c->resolver->ty_never;
     }
 
     switch (expr->as.unary.op) {
@@ -1385,6 +1403,9 @@ static Type *check_match(TypeChecker *c, AstExpr *expr, Type *expected)
         result = join_types(c, result, body_type);
     }
 
+    if (!c->had_error && scrutinee->kind != TY_ERROR) {
+        check_match_reachable(c, expr, scrutinee);
+    }
     if (!c->had_error && scrutinee->kind != TY_ERROR) {
         check_match_exhaustive(c, expr, scrutinee);
     }
@@ -1956,6 +1977,113 @@ static AstPatternList *row_rest(CoverRow *row)
     return row->patterns->next;
 }
 
+static int pattern_is_irrefutable(TypeChecker *c, Type *type,
+                                  AstPattern *pat)
+{
+    if (pat == NULL || type == NULL) {
+        return 0;
+    }
+
+    switch (pat->kind) {
+    case PAT_WILDCARD:
+        return 1;
+    case PAT_VAR:
+        if (type->kind == TY_ENUM) {
+            TypeVariant *v;
+            v = find_variant(type->as.nominal.info,
+                             pat->as.var.name, pat->as.var.name_len);
+            if (v != NULL) {
+                return 0;
+            }
+        }
+        return 1;
+    case PAT_UNIT:
+        return type->kind == TY_UNIT;
+    case PAT_TUPLE: {
+        AstPatternList *item;
+        TypeList *item_type;
+        item = pat->as.tuple.items;
+        item_type = type->kind == TY_TUPLE
+                        ? type->as.tuple.items : NULL;
+        if (type->kind != TY_TUPLE) {
+            return 0;
+        }
+        while (item != NULL && item_type != NULL) {
+            if (!pattern_is_irrefutable(c, item_type->type, item->pattern)) {
+                return 0;
+            }
+            item = item->next;
+            item_type = item_type->next;
+        }
+        return item == NULL && item_type == NULL;
+    }
+    case PAT_STRUCT: {
+        TypeInfo *info;
+        TypeInfo *pinfo;
+        TypeField *field;
+
+        if (type->kind != TY_STRUCT) {
+            return 0;
+        }
+        info = type->as.nominal.info;
+        pinfo = lookup_struct_info(c, pat->as.struct_.name,
+                                   pat->as.struct_.name_len, pat->span);
+        if (pinfo != info) {
+            return 0;
+        }
+        for (field = info->fields; field != NULL; field = field->next) {
+            AstPattern *sub;
+            sub = find_pattern_field(pat->as.struct_.fields,
+                                     field->name, field->name_len);
+            if (sub == NULL ||
+                !pattern_is_irrefutable(c, field->type, sub)) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    case PAT_ENUM: {
+        TypeVariant *v;
+        AstPatternList *item;
+        TypeList *payload;
+
+        if (type->kind != TY_ENUM) {
+            return 0;
+        }
+        v = find_variant(type->as.nominal.info,
+                         pat->as.enum_.name, pat->as.enum_.name_len);
+        if (v == NULL || v->next != NULL || v != type->as.nominal.info->variants) {
+            return 0;
+        }
+        item = pat->as.enum_.payload;
+        payload = v->payload;
+        while (item != NULL && payload != NULL) {
+            if (!pattern_is_irrefutable(c, payload->type, item->pattern)) {
+                return 0;
+            }
+            item = item->next;
+            payload = payload->next;
+        }
+        return item == NULL && payload == NULL;
+    }
+    default:
+        return 0;
+    }
+}
+
+static int row_is_irrefutable(TypeChecker *c, TypeList *types,
+                              AstPatternList *patterns)
+{
+    while (types != NULL && patterns != NULL) {
+        if (!pattern_is_irrefutable(c, types->type, patterns->pattern)) {
+            return 0;
+        }
+        types = types->next;
+        patterns = patterns->next;
+    }
+    return types == NULL && patterns == NULL;
+}
+
 static int coverage_rows(TypeChecker *c, TypeList *types, CoverRow *rows);
 
 static int coverage_infinite(TypeChecker *c, TypeList *types,
@@ -2337,6 +2465,8 @@ static int coverage_struct(TypeChecker *c, TypeList *types, CoverRow *rows)
 
 static int coverage_rows(TypeChecker *c, TypeList *types, CoverRow *rows)
 {
+    CoverRow *row;
+
     if (types == NULL) {
         return rows != NULL;
     }
@@ -2345,6 +2475,12 @@ static int coverage_rows(TypeChecker *c, TypeList *types, CoverRow *rows)
     }
     if (types->type->kind == TY_NEVER) {
         return 1;
+    }
+
+    for (row = rows; row != NULL; row = row->next) {
+        if (row_is_irrefutable(c, types, row->patterns)) {
+            return 1;
+        }
     }
 
     switch (types->type->kind) {
@@ -2362,6 +2498,35 @@ static int coverage_rows(TypeChecker *c, TypeList *types, CoverRow *rows)
         return coverage_struct(c, types, rows);
     default:
         return coverage_infinite(c, types, rows);
+    }
+}
+
+static void check_match_reachable(TypeChecker *c, AstExpr *expr,
+                                  Type *scrutinee)
+{
+    CoverRow *head;
+    CoverRow *tail;
+    AstMatchArm *arm;
+    TypeList *types;
+
+    head = NULL;
+    tail = NULL;
+    types = type_list_cons(c->arena, scrutinee, NULL);
+    if (types == NULL) {
+        fprintf(stderr, "idem: out of memory\n");
+        exit(1);
+    }
+
+    for (arm = expr->as.match.arms; arm != NULL; arm = arm->next) {
+        AstPatternList *patterns;
+
+        if (head != NULL && coverage_rows(c, types, head)) {
+            checker_error(c, arm->span, "unreachable pattern");
+            return;
+        }
+
+        patterns = pattern_list_node(c, arm->pattern, NULL);
+        cover_row_add(c, &head, &tail, patterns);
     }
 }
 

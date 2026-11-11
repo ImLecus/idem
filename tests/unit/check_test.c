@@ -276,6 +276,18 @@ static void test_errors(void)
         "fn main(args: Array[String]) -> Unit = ()\n"));
     expect_error("build/_check_nonex_tuple.idem", "non-exhaustive match");
 
+    CHECK(write_file("build/_check_unreachable.idem",
+        "fn f(b: Bool) -> Int = match b { _ => 0, true => 1 }\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_error("build/_check_unreachable.idem", "unreachable pattern");
+
+    CHECK(write_file("build/_check_import_lib.idem",
+        "fn bad() -> Int = \"s\"\n"));
+    CHECK(write_file("build/_check_import.idem",
+        "import \"_check_import_lib.idem\"\n"
+        "fn main(args: Array[String]) -> Unit = ()\n"));
+    expect_error("build/_check_import.idem", "expected Int");
+
     remove("build/_check_arith.idem");
     remove("build/_check_let.idem");
     remove("build/_check_arity.idem");
@@ -292,6 +304,9 @@ static void test_errors(void)
     remove("build/_check_nonex_enum.idem");
     remove("build/_check_nonex_union.idem");
     remove("build/_check_nonex_tuple.idem");
+    remove("build/_check_unreachable.idem");
+    remove("build/_check_import.idem");
+    remove("build/_check_import_lib.idem");
 }
 
 int check_test_run(void)
