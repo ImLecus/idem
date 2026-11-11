@@ -427,7 +427,7 @@ static void test_errors(void)
     arena_free(&arena);
 }
 
-int main(void)
+int lexer_test_run(void)
 {
     test_keywords();
     test_identifiers();
