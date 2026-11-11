@@ -822,7 +822,7 @@ Union injection and `Any` widening are represented at runtime with tags. There a
 - A literal matches a value equal to that literal.
 - `()` matches the unit value.
 - `(p₁, ..., pₙ)` matches a tuple of arity `n`.
-- `Name { field: p, ... }` matches a struct. Every field must be mentioned; use `_` to ignore a field. Shorthand `Name { x, y }` binds fields `x` and `y`.
+- `Name { field: p, ... }` matches a struct. Every field must be mentioned; use `_` to ignore a field. Shorthand `Name { x, y }` binds fields `x` and `y`. Shorthand fields are always bindings, even when a field's type is an enum with a variant of the same name.
 - `Variant` matches an enum variant with no payload.
 - `Variant(p₁, ..., pₙ)` matches an enum variant with payload.
 - `x: T` matches a value of a union member `T` and binds it to `x` with type `T`. It is valid only when the scrutinee type is a union containing `T`, and never on `Any`.
@@ -836,7 +836,7 @@ A pattern is **irrefutable** if it always matches a value of its type:
 - `_` and variable patterns are irrefutable;
 - `()` is irrefutable for `Unit`;
 - a tuple of irrefutable patterns is irrefutable;
-- a struct pattern is irrefutable if all its field patterns are irrefutable.
+- a struct pattern is irrefutable if all its field patterns are irrefutable. Shorthand fields are always bindings and therefore irrefutable.
 
 Enum, union type, and literal patterns are refutable. `let` accepts only irrefutable patterns; `match` accepts all patterns.
 
@@ -849,6 +849,7 @@ A pattern is checked against a scrutinee type:
 - A tuple pattern requires a tuple type of the same arity.
 - A struct pattern requires the named struct type; each field pattern is checked against the field type.
 - An enum pattern requires the named enum type; payload patterns are checked against the variant's payload types.
+- A bare identifier is interpreted as an enum variant when the scrutinee type is an enum that declares a variant of that name; otherwise it is a variable binding.
 - A type pattern `x: T` requires the scrutinee type to be a union containing `T`; `x` has type `T`.
 
 ### 7.4. Exhaustiveness
@@ -1079,7 +1080,8 @@ Operating-system errors are mapped to `NotFound`, `PermissionDenied`, or `Io(mes
 
 Built-ins with multiple signatures are resolved using the static types of the arguments:
 
-- The argument types must match exactly one overload, after alias expansion and union normalization.
+- The argument types must select exactly one overload, after alias expansion and union normalization.
+- Arguments must be assignable to the selected overload's parameter types.
 - If an argument has a union type, the call is ambiguous unless the union is first eliminated with `match`.
 - If no overload matches, the call is a type error.
 - If more than one overload matches, the call is a type error (ambiguity).
