@@ -169,6 +169,74 @@ Value idem_chars(Value value, const IdemTypeDesc *result_type)
     return result;
 }
 
+static int idem_is_digit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static int idem_decimal_int_syntax(const char *text)
+{
+    const char *p;
+    p = text;
+    if (*p == '+' || *p == '-') {
+        p += 1;
+    }
+    if (!idem_is_digit(*p)) {
+        return 0;
+    }
+    while (idem_is_digit(*p)) {
+        p += 1;
+    }
+    return *p == '\0';
+}
+
+static int idem_decimal_float_syntax(const char *text)
+{
+    const char *p;
+    int digits;
+
+    p = text;
+    if (*p == '+' || *p == '-') {
+        p += 1;
+    }
+
+    digits = 0;
+    while (idem_is_digit(*p)) {
+        digits += 1;
+        p += 1;
+    }
+
+    if (*p == '.') {
+        p += 1;
+        while (idem_is_digit(*p)) {
+            digits += 1;
+            p += 1;
+        }
+    }
+
+    if (digits == 0) {
+        return 0;
+    }
+
+    if (*p == 'e' || *p == 'E') {
+        int exponent_digits;
+        p += 1;
+        if (*p == '+' || *p == '-') {
+            p += 1;
+        }
+        exponent_digits = 0;
+        while (idem_is_digit(*p)) {
+            exponent_digits += 1;
+            p += 1;
+        }
+        if (exponent_digits == 0) {
+            return 0;
+        }
+    }
+
+    return *p == '\0';
+}
+
 Value idem_to_int(Value value)
 {
     IdemStringObj *obj;
@@ -200,10 +268,8 @@ Value idem_to_int(Value value)
     errno = 0;
     end = NULL;
     parsed = strtol(text, &end, 10);
-    ok = end != text && *end == '\0' && errno != ERANGE;
-    if (ok) {
-        ok = text[0] != ' ' && text[0] != '\t';
-    }
+    ok = idem_decimal_int_syntax(text) &&
+         end != text && *end == '\0' && errno != ERANGE;
     free(text);
 
     if (!ok) {
@@ -237,10 +303,8 @@ Value idem_to_float(Value value)
     errno = 0;
     end = NULL;
     parsed = strtod(text, &end);
-    ok = end != text && *end == '\0' && errno != ERANGE;
-    if (ok) {
-        ok = text[0] != ' ' && text[0] != '\t';
-    }
+    ok = idem_decimal_float_syntax(text) &&
+         end != text && *end == '\0' && errno != ERANGE;
     free(text);
 
     if (!ok) {
