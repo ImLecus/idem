@@ -1,0 +1,13 @@
+fn main(args: Array[String]) -> Unit = {
+    let result: String | Error = readFile("does-not-exist.txt")
+
+    match result {
+        contents: String => println(contents),
+        err: Error => match err {
+            NotFound => println("not found"),
+            PermissionDenied => println("permission denied"),
+            InvalidUtf8 => println("invalid UTF-8"),
+            Io(message) => println(message),
+        },
+    }
+}
