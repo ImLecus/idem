@@ -3,58 +3,11 @@
 #include <string.h>
 
 #include "arena.h"
+#include "ast.h"
 #include "lexer.h"
+#include "parser.h"
 #include "platform.h"
 #include "token.h"
-
-static int u64_is_zero(const u64 *v)
-{
-    int i;
-    for (i = 0; i < 4; i++) {
-        if (v->w[i] != 0) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-static unsigned u64_div10(u64 *v)
-{
-    unsigned long carry;
-    int i;
-
-    carry = 0;
-    for (i = 3; i >= 0; i--) {
-        unsigned long cur;
-        cur = (carry << 16) | (unsigned long)v->w[i];
-        v->w[i] = (u16)(cur / 10ul);
-        carry = cur % 10ul;
-    }
-    return (unsigned)carry;
-}
-
-static void print_u64(u64 v)
-{
-    char buf[32];
-    int n;
-
-    n = 0;
-    if (u64_is_zero(&v)) {
-        putchar('0');
-        return;
-    }
-
-    while (!u64_is_zero(&v)) {
-        unsigned digit;
-        digit = u64_div10(&v);
-        buf[n++] = (char)('0' + digit);
-    }
-
-    while (n > 0) {
-        n -= 1;
-        putchar(buf[n]);
-    }
-}
 
 static unsigned char *read_file(const char *path, size_t *out_len)
 {
@@ -105,31 +58,14 @@ static unsigned char *read_file(const char *path, size_t *out_len)
     return buf;
 }
 
-int main(int argc, char **argv)
+static int dump_tokens(Lexer *lx)
 {
-    unsigned char *src;
-    size_t len;
-    Arena arena;
-    Lexer lx;
     Token t;
     int errors;
 
-    if (argc != 2) {
-        fprintf(stderr, "usage: idem <file.idem>\n");
-        return 2;
-    }
-
-    src = read_file(argv[1], &len);
-    if (src == NULL) {
-        return 1;
-    }
-
-    arena_init(&arena);
-    lexer_init(&lx, argv[1], src, len, &arena);
-
     errors = 0;
     for (;;) {
-        t = lexer_next(&lx);
+        t = lexer_next(lx);
 
         printf("%lu:%lu: %s",
                (unsigned long)t.span.line,
@@ -142,7 +78,7 @@ int main(int argc, char **argv)
             break;
         case TOK_INT:
             printf(" ");
-            print_u64(t.as.int_lit.value);
+            u64_print(t.as.int_lit.value);
             break;
         case TOK_FLOAT:
             printf(" %.17g", t.as.float_lit.value);
@@ -172,7 +108,66 @@ int main(int argc, char **argv)
         }
     }
 
-    arena_free(&arena);
-    free(src);
     return errors != 0 ? 1 : 0;
+}
+
+int main(int argc, char **argv)
+{
+    unsigned char *src;
+    size_t len;
+    Arena arena;
+    Lexer lx;
+    const char *path;
+    int tokens_only;
+
+    tokens_only = 0;
+    if (argc == 3 && strcmp(argv[1], "--tokens") == 0) {
+        tokens_only = 1;
+        path = argv[2];
+    } else if (argc == 2) {
+        path = argv[1];
+    } else {
+        fprintf(stderr, "usage: idem [--tokens] <file.idem>\n");
+        return 2;
+    }
+
+    src = read_file(path, &len);
+    if (src == NULL) {
+        return 1;
+    }
+
+    arena_init(&arena);
+    lexer_init(&lx, path, src, len, &arena);
+
+    if (tokens_only) {
+        int status;
+        status = dump_tokens(&lx);
+        arena_free(&arena);
+        free(src);
+        return status;
+    } else {
+        Parser parser;
+        AstProgram *program;
+
+        parser_init(&parser, &lx, &arena);
+        program = parser_parse_program(&parser);
+
+        if (parser_had_error(&parser)) {
+            Span span;
+            span = parser_error_span(&parser);
+            fprintf(stderr, "%s:%lu:%lu: error: %s\n",
+                    path,
+                    (unsigned long)span.line,
+                    (unsigned long)span.column,
+                    parser_error_message(&parser));
+            arena_free(&arena);
+            free(src);
+            return 1;
+        }
+
+        ast_dump_program(program);
+        arena_free(&arena);
+        free(src);
+        return 0;
+    }
 }

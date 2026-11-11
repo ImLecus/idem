@@ -16,6 +16,11 @@ typedef struct Parser {
     int had_error;
     Span error_span;
     char error_message[256];
+
+    /* Set while parsing a match scrutinee: an identifier followed by '{'
+     * is a variable, not a struct literal, because the brace starts the
+     * match arms. Parentheses temporarily clear the flag. */
+    int no_struct_literal;
 } Parser;
 
 void parser_init(Parser *p, Lexer *lx, Arena *arena);
