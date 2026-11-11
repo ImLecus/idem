@@ -33,7 +33,6 @@ runtime/    C89 runtime and garbage collector (to be implemented)
 tests/      unit tests and golden tests
 examples/   example Idem programs
 docs/       language specification and compiler guide
-private/    design notes and decision log
 Makefile    build and test entry points (to be added with the compiler)
 LICENSE     MIT
 ```
