@@ -1,0 +1,25 @@
+[0, 1, 2, 3, 4]
+[5, 4, 3, 2, 1]
+[0, 2, 4, 6, 8]
+[]
+[1, 2, 3]
+[a, b, c]
+[3, 2, 1]
+List[1, 2, 3]
+true
+false
+true
+false
+true
+true
+true
+[a, b, , c]
+hi
+true
+false
+true
+false
+X-b-X
+1
+2
+3

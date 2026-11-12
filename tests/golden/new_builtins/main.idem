@@ -1,0 +1,32 @@
+fn main(args: Array[String]) -> Unit = {
+  println(range(0, 5))
+  println(range(5, 0, -1))
+  println(range(0, 10, 2))
+  println(range(5, 0, 1))
+
+  let xs = [3, 1, 2]
+  println(sort(xs))
+  println(sort(["b", "a", "c"]))
+  println(sort(xs, fn(a: Int, b: Int) -> Int = b - a))
+  println(sort(List[3, 1, 2]))
+
+  let m: Map[String, Int] = Map{ "a": 1 }
+  println(has(m, "a"))
+  println(has(m, "b"))
+
+  println(contains("hello", "ell"))
+  println(contains("hello", "x"))
+  println(contains(b"abc", b"bc"))
+  println(contains([1, 2, 3], 2))
+  println(contains(List["a", "b"], "b"))
+
+  println(split("a,b,,c", ","))
+  println(trim("  hi \n"))
+  println(startsWith("hello", "he"))
+  println(startsWith("hello", "lo"))
+  println(endsWith("hello", "lo"))
+  println(endsWith("hello", "he"))
+  println(replace("a-b-a", "a", "X"))
+
+  forEach([1, 2, 3], fn(x: Int) -> Unit = println(x))
+}

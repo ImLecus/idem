@@ -208,6 +208,82 @@ static void test_to_int_char(void)
     remove("build/_check_to_int_char.idem");
 }
 
+static int write_new_builtins_program(const char *path)
+{
+    FILE *f;
+
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        return 0;
+    }
+
+    fputs("fn main(args: Array[String]) -> Unit = {\n", f);
+    fputs("  let r: Array[Int] = range(0, 3)\n", f);
+    fputs("  let r1: Array[Int] = range(3)\n", f);
+    fputs("  let xs = [3, 1, 2]\n", f);
+    fputs("  let a: Array[Int] = sort(xs)\n", f);
+    fputs("  let b: Array[Int] = sort(xs, fn(x: Int, y: Int) -> Int = y - x)\n", f);
+    fputs("  let m: Map[String, Int] = Map{ \"a\": 1 }\n", f);
+    fputs("  let h: Bool = has(m, \"a\")\n", f);
+    fputs("  let c: Bool = contains(xs, 1)\n", f);
+    fputs("  let cs: Bool = contains(\"abc\", \"b\")\n", f);
+    fputs("  let cb: Bool = contains(b\"abc\", b\"b\")\n", f);
+    fputs("  let sp: Array[String] = split(\"a,b\", \",\")\n", f);
+    fputs("  let t: String = trim(\" x \")\n", f);
+    fputs("  let sw: Bool = startsWith(\"abc\", \"a\")\n", f);
+    fputs("  let ew: Bool = endsWith(\"abc\", \"c\")\n", f);
+    fputs("  let rp: String = replace(\"a-b\", \"-\", \"+\")\n", f);
+    fputs("  forEach(xs, fn(x: Int) -> Unit = ())\n", f);
+    fputs("  println(r)\n", f);
+    fputs("  println(a)\n", f);
+    fputs("  println(b)\n", f);
+    fputs("  println(h)\n", f);
+    fputs("  println(c)\n", f);
+    fputs("  println(cs)\n", f);
+    fputs("  println(cb)\n", f);
+    fputs("  println(sp)\n", f);
+    fputs("  println(t)\n", f);
+    fputs("  println(sw)\n", f);
+    fputs("  println(ew)\n", f);
+    fputs("  println(rp)\n", f);
+    fputs("}\n", f);
+
+    if (ferror(f)) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+    return 1;
+}
+
+static void test_new_builtins(void)
+{
+    CHECK(write_new_builtins_program("build/_check_new_builtins.idem"));
+    expect_ok("build/_check_new_builtins.idem");
+    remove("build/_check_new_builtins.idem");
+
+    CHECK(write_file("build/_check_has_bad.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  let b = has([1, 2], 1)\n"
+        "}\n"));
+    expect_error("build/_check_has_bad.idem", "expects a Map");
+    remove("build/_check_has_bad.idem");
+
+    CHECK(write_file("build/_check_foreach_bad.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  forEach([1, 2], fn(x: Int) -> Int = x)\n"
+        "}\n"));
+    expect_error("build/_check_foreach_bad.idem", "forEach");
+    remove("build/_check_foreach_bad.idem");
+
+    CHECK(write_file("build/_check_sort_bad.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  let xs = sort([1, 2], fn(x: Int, y: Int) -> String = \"\")\n"
+        "}\n"));
+    expect_error("build/_check_sort_bad.idem", "comparator");
+    remove("build/_check_sort_bad.idem");
+}
+
 static void test_join_builtin(void)
 {
     CHECK(write_file("build/_check_join.idem",
@@ -382,6 +458,7 @@ int check_test_run(void)
     test_valid_program();
     test_struct_shorthand_binding();
     test_to_int_char();
+    test_new_builtins();
     test_join_builtin();
     test_errors();
 

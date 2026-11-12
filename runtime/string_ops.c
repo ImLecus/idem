@@ -339,3 +339,250 @@ Value idem_from_bytes(Value value)
     }
     return idem_string(obj->data, obj->length);
 }
+
+static int idem_find_bytes(const char *haystack, size_t haystack_len,
+                           const char *needle, size_t needle_len,
+                           size_t from, size_t *position)
+{
+    size_t i;
+
+    if (needle_len == 0) {
+        *position = from;
+        return 1;
+    }
+    if (from > haystack_len || needle_len > haystack_len - from) {
+        return 0;
+    }
+    for (i = from; i <= haystack_len - needle_len; i++) {
+        if (memcmp(haystack + i, needle, needle_len) == 0) {
+            *position = i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+Value idem_starts_with(Value value, Value prefix)
+{
+    IdemStringObj *value_obj;
+    IdemStringObj *prefix_obj;
+
+    if (value.tag != IDEM_TAG_STRING && value.tag != IDEM_TAG_BYTES) {
+        idem_panic_str("startsWith expects String or Bytes");
+    }
+    if (value.tag != prefix.tag) {
+        idem_panic_str("startsWith expects matching types");
+    }
+    value_obj = (IdemStringObj *)value.as.obj;
+    prefix_obj = (IdemStringObj *)prefix.as.obj;
+    return idem_bool(prefix_obj->length <= value_obj->length &&
+                     (prefix_obj->length == 0 ||
+                      memcmp(value_obj->data, prefix_obj->data,
+                             prefix_obj->length) == 0));
+}
+
+Value idem_ends_with(Value value, Value suffix)
+{
+    IdemStringObj *value_obj;
+    IdemStringObj *suffix_obj;
+
+    if (value.tag != IDEM_TAG_STRING && value.tag != IDEM_TAG_BYTES) {
+        idem_panic_str("endsWith expects String or Bytes");
+    }
+    if (value.tag != suffix.tag) {
+        idem_panic_str("endsWith expects matching types");
+    }
+    value_obj = (IdemStringObj *)value.as.obj;
+    suffix_obj = (IdemStringObj *)suffix.as.obj;
+    return idem_bool(
+        suffix_obj->length <= value_obj->length &&
+        (suffix_obj->length == 0 ||
+         memcmp(value_obj->data + value_obj->length - suffix_obj->length,
+                suffix_obj->data, suffix_obj->length) == 0));
+}
+
+static int idem_trim_char(unsigned char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+           c == '\v' || c == '\f';
+}
+
+Value idem_trim(Value value)
+{
+    IdemStringObj *obj;
+    size_t start;
+    size_t end;
+
+    if (value.tag != IDEM_TAG_STRING) {
+        idem_panic_str("trim expects a String");
+    }
+    obj = (IdemStringObj *)value.as.obj;
+    start = 0;
+    end = obj->length;
+    while (start < end &&
+           idem_trim_char((unsigned char)obj->data[start])) {
+        start += 1;
+    }
+    while (end > start &&
+           idem_trim_char((unsigned char)obj->data[end - 1])) {
+        end -= 1;
+    }
+    return idem_string(obj->data + start, end - start);
+}
+
+Value idem_split(Value value, Value separator,
+                 const IdemTypeDesc *type)
+{
+    IdemStringObj *obj;
+    IdemStringObj *separator_obj;
+    Value *items;
+    Value result;
+    size_t count;
+    size_t position;
+    size_t start;
+    size_t index;
+
+    if (value.tag != IDEM_TAG_STRING) {
+        idem_panic_str("split expects a String");
+    }
+    if (separator.tag != IDEM_TAG_STRING) {
+        idem_panic_str("split expects a String separator");
+    }
+    obj = (IdemStringObj *)value.as.obj;
+    separator_obj = (IdemStringObj *)separator.as.obj;
+    if (separator_obj->length == 0) {
+        idem_panic_str("split separator cannot be empty");
+    }
+
+    count = 1;
+    position = 0;
+    {
+        size_t found;
+        while (idem_find_bytes(obj->data, obj->length,
+                               separator_obj->data, separator_obj->length,
+                               position, &found)) {
+            count += 1;
+            position = found + separator_obj->length;
+        }
+    }
+
+    if (count > ((size_t)-1) / sizeof(Value)) {
+        idem_panic_str("split result is too large");
+    }
+    items = (Value *)malloc(sizeof(Value) * count);
+    if (items == NULL) {
+        idem_panic_oom();
+    }
+    for (index = 0; index < count; index++) {
+        items[index] = idem_unit();
+    }
+    idem_gc_push_frame(items, count);
+
+    start = 0;
+    position = 0;
+    index = 0;
+    {
+        size_t found;
+        while (idem_find_bytes(obj->data, obj->length,
+                               separator_obj->data, separator_obj->length,
+                               position, &found)) {
+            items[index++] = idem_string(obj->data + start, found - start);
+            position = found + separator_obj->length;
+            start = position;
+        }
+    }
+    items[index] = idem_string(obj->data + start, obj->length - start);
+
+    result = idem_array(items, count, type);
+    idem_gc_pop_frame();
+    free(items);
+    return result;
+}
+
+Value idem_replace(Value value, Value old_value, Value new_value)
+{
+    IdemStringObj *obj;
+    IdemStringObj *old_obj;
+    IdemStringObj *new_obj;
+    size_t count;
+    size_t position;
+    size_t start;
+    size_t base;
+    size_t total;
+    size_t index;
+    char *data;
+    Value result;
+
+    if (value.tag != IDEM_TAG_STRING ||
+        old_value.tag != IDEM_TAG_STRING ||
+        new_value.tag != IDEM_TAG_STRING) {
+        idem_panic_str("replace expects three Strings");
+    }
+    obj = (IdemStringObj *)value.as.obj;
+    old_obj = (IdemStringObj *)old_value.as.obj;
+    new_obj = (IdemStringObj *)new_value.as.obj;
+    if (old_obj->length == 0) {
+        idem_panic_str("replace pattern cannot be empty");
+    }
+
+    count = 0;
+    position = 0;
+    {
+        size_t found;
+        while (idem_find_bytes(obj->data, obj->length,
+                               old_obj->data, old_obj->length,
+                               position, &found)) {
+            count += 1;
+            position = found + old_obj->length;
+        }
+    }
+
+    base = obj->length - count * old_obj->length;
+    if (new_obj->length != 0 &&
+        count > (((size_t)-1) - base) / new_obj->length) {
+        idem_panic_str("replaced string is too large");
+    }
+    total = base + count * new_obj->length;
+    if (total == (size_t)-1) {
+        idem_panic_str("replaced string is too large");
+    }
+
+    data = (char *)malloc(total + 1);
+    if (data == NULL) {
+        idem_panic_oom();
+    }
+
+    start = 0;
+    position = 0;
+    index = 0;
+    {
+        size_t found;
+        while (idem_find_bytes(obj->data, obj->length,
+                               old_obj->data, old_obj->length,
+                               position, &found)) {
+            size_t chunk;
+            chunk = found - start;
+            if (chunk != 0) {
+                memcpy(data + index, obj->data + start, chunk);
+                index += chunk;
+            }
+            if (new_obj->length != 0) {
+                memcpy(data + index, new_obj->data, new_obj->length);
+                index += new_obj->length;
+            }
+            position = found + old_obj->length;
+            start = position;
+        }
+    }
+    if (start < obj->length) {
+        size_t tail;
+        tail = obj->length - start;
+        memcpy(data + index, obj->data + start, tail);
+        index += tail;
+    }
+    data[index] = '\0';
+
+    result = idem_string(data, total);
+    free(data);
+    return result;
+}

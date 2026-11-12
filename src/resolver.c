@@ -251,11 +251,13 @@ static const char *RESERVED_TYPES[] = {
 static const char *RESERVED_VALUES[] = {
     "print", "println", "readLine", "readFile", "writeFile", "flush",
     "exit", "panic",
-    "len", "get", "set", "remove", "push", "concat", "join", "map",
-    "filter", "fold", "sum", "keys", "values",
+    "len", "get", "set", "remove", "push", "concat", "join", "has",
+    "range", "forEach", "sort", "contains", "map", "filter", "fold",
+    "sum", "keys", "values",
     "abs", "min", "max", "sqrt", "floor", "ceil", "pow", "random", "now",
     "byteAt", "slice", "compare", "charAt", "chars", "toInt", "toFloat",
-    "toString", "toBytes", "fromBytes",
+    "toString", "toBytes", "fromBytes", "split", "trim", "startsWith",
+    "endsWith", "replace",
     "NotFound", "PermissionDenied", "InvalidUtf8", "Io"
 };
 

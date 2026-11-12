@@ -1,7 +1,7 @@
 # The Idem Reference Compiler
 
-**Version:** 0.1.0-draft  
-**Date:** 2026-11-11
+**Version:** 1.0.0
+**Date:** 2026-11-12
 
 ---
 
@@ -47,16 +47,17 @@ typedef signed   short i16;
 typedef unsigned long  u32;
 typedef signed   long  i32;
 
-#if defined(IDEM_HAS_LONG64)
-typedef unsigned long      u64;
-typedef signed   long      i64;
-#else
-typedef struct { u32 lo, hi; } u64;
-typedef struct { u32 lo, hi; } i64;
-#endif
+typedef struct u64 {
+    u16 w[4]; /* little-endian limbs */
+} u64;
 ```
 
-On platforms where `long` is 64 bits, the compiler can use it directly for `Int`; otherwise it uses the two-word representation and the helper functions in `runtime/i64.c` for arithmetic, comparison, shifting, and conversion. The runtime must verify the assumption at startup or at build time.
+`u32` is at least 32 bits; on LP64 it is 64 bits wide, which is harmless
+for the uses in the compiler. `u64` is a portable four-limb
+representation so the lexer does not depend on `long long`. The runtime
+uses `long` for `Int` and requires it to be 64 bits; `runtime/value.c`
+checks this at build time. There is no two-word runtime fallback in
+`idem 1.0.0`.
 
 ### 2.2. Source locations
 
@@ -101,6 +102,7 @@ src/
     check.c/.h      bidirectional type checker
     ir.c/.h         typed AST lowering to a slot-based IR
     codegen.c/.h    C89 emission
+    version.h       compiler and language version strings
 runtime/
     value.h         Value representation, tags, and runtime API
     internal.h      heap object layouts and internal helpers
@@ -114,8 +116,9 @@ runtime/
 tests/
     unit/           lexer, parser, resolver, checker tests
     golden/         .idem programs with expected stdout/stderr/exit
-    errors/         .idem programs with expected diagnostics
     run_golden.sh   golden test runner
+    run_cli.sh      command-line interface tests
+    run_reloc.sh    relocatable runtime test
 benchmarks/
     README.md       benchmark methodology and knobs
     compiler_bench.c in-process phase timing
@@ -132,7 +135,7 @@ LICENSE
 
 ## 4. Driver and CLI
 
-`src/main.c` implements the single command:
+`src/main.c` implements the single compilation command:
 
 ```
 idem file.idem [program arguments...]
@@ -143,24 +146,36 @@ Steps:
 1. Read `file.idem` as UTF-8.
 2. Run the compiler pipeline.
 3. If there are errors, print diagnostics to stderr and exit 1.
-4. Write the generated C89 to a temporary file with a `.c` suffix.
-5. Invoke the system C compiler:
+4. Create a private temporary directory with `mkdtemp` and write the
+   generated C89 to `main.c` inside it.
+5. Resolve the runtime source directory:
+   - `$IDEM_RUNTIME_DIR` when set;
+   - otherwise `../lib/idem/runtime` or `runtime` relative to the
+     executable;
+   - otherwise the build-tree location compiled into the driver.
+6. Invoke the system C compiler:
    - use `$CC` if set, otherwise `cc`;
-   - compile the generated C file together with the runtime sources in `runtime/`;
+   - compile the generated C file together with the runtime sources in
+     the resolved runtime directory;
    - pass `-std=c89 -pedantic -Wall -Wextra -O2` for the reference build;
    - produce a temporary executable.
-6. Run the executable with the remaining program arguments.
-7. Forward the program's exit status.
-8. Delete the temporary files unless `IDEM_KEEP_C` is set.
+7. Run the executable with the remaining program arguments using
+   `fork` and `execv`, so arguments are forwarded without shell parsing.
+8. Forward the program's exit status.
+9. Delete the temporary directory unless `IDEM_KEEP_C` is set.
 
 Usage errors exit with status 2. Compile errors exit with status 1. A program that calls `panic` exits with 101. A normal `main` exits with 0 unless the program calls `exit`.
 
-The driver also supports two inspection modes:
+The driver also supports inspection and metadata modes:
 
 - `idem --tokens file.idem` prints the token stream;
-- `idem --emit-c file.idem` prints the generated C89.
+- `idem --emit-c file.idem` prints the generated C89;
+- `idem --version` prints `idem 1.0.0 (Idem2026)`;
+- `idem --help` prints usage and environment variables.
 
-The driver does not need a build system, a manifest, or a package manager in version 0.1.
+The driver requires a POSIX platform for `mkdtemp`, `fork`, and `execv`;
+the generated code and runtime remain strict C89. The driver does not
+need a build system, a manifest, or a package manager in `idem 1.0.0`.
 
 ---
 
@@ -354,7 +369,7 @@ The resolver checks:
 
 ### 7.7. Name collisions
 
-Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. Version 0.1 has no qualified names or import aliases.
+Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. `Idem2026` has no qualified names or import aliases.
 
 ---
 
@@ -731,9 +746,11 @@ The runtime provides:
   `idem_compare`, `idem_byte_at`, `idem_char_at`, `idem_chars`,
   `idem_to_bytes`, `idem_from_bytes`;
 - `idem_array`, `idem_list`, `idem_map_lit`, `idem_get`, `idem_set`,
-  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`;
+  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`, `idem_has`,
+  `idem_range`, `idem_for_each`, `idem_sort`, `idem_contains`;
 - `idem_map`, `idem_filter`, `idem_fold`, `idem_sum_int`,
-  `idem_sum_float`, `idem_keys`, `idem_values`;
+  `idem_sum_float`, `idem_keys`, `idem_values`, `idem_split`, `idem_trim`,
+  `idem_starts_with`, `idem_ends_with`, `idem_replace`;
 - `idem_print`, `idem_to_string`, `idem_panic`.
 
 All collection operations preserve immutability in the observable API. The reference runtime copies on update. The GC handles reclamation.
@@ -880,11 +897,7 @@ The test runner (`tests/run_golden.sh`, invoked by `make golden`) compiles and r
 - `shapes.idem`
 - `collections.idem`
 
-### 12.4. Error tests
-
-Error tests contain an `.idem` file and an `errors.txt` file with expected diagnostics. The runner compares file, line, column, and message.
-
-### 12.5. Benchmarks
+### 12.4. Benchmarks
 
 `benchmarks/` contains performance inputs and runners:
 
@@ -894,7 +907,7 @@ Error tests contain an `.idem` file and an `errors.txt` file with expected diagn
 
 The compiler benchmark runs the pipeline in-process. The runtime benchmark excludes C compilation by generating and building each workload once before timing repeated executions. See `benchmarks/README.md` for workload sizes and environment variables.
 
-### 12.6. Future testing
+### 12.5. Future testing
 
 - Property-based tests for union normalization and subtyping.
 - Fuzzing for the lexer and parser.
@@ -906,7 +919,7 @@ The compiler benchmark runs the pipeline in-process. The runtime benchmark exclu
 
 ## 13. Implementation Plan
 
-A practical order for building version 0.1:
+A practical order for building the reference compiler:
 
 1. **Skeleton:** arena, diagnostics, token definitions, driver.
 2. **Lexer:** all tokens, UTF-8, comments, literals.
@@ -922,7 +935,7 @@ A practical order for building version 0.1:
 12. **Tests and examples:** golden tests, unit tests, acceptance programs.
 13. **Polish:** diagnostics, float formatting, documentation.
 
-Version 0.1 deliberately omits:
+The first executable milestone deliberately omitted:
 
 - modules in the first executable milestone (they can be added after the core works);
 - `List` and `Map` in the first milestone (arrays, strings, and structs/enums are enough to validate the model);
