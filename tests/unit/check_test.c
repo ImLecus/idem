@@ -208,6 +208,27 @@ static void test_to_int_char(void)
     remove("build/_check_to_int_char.idem");
 }
 
+static void test_join_builtin(void)
+{
+    CHECK(write_file("build/_check_join.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  let a: String = join([\"a\", \"b\"], \"-\")\n"
+        "  let b: String = join(List[\"x\", \"y\"], \",\")\n"
+        "  println(a)\n"
+        "  println(b)\n"
+        "}\n"));
+    expect_ok("build/_check_join.idem");
+    remove("build/_check_join.idem");
+
+    CHECK(write_file("build/_check_join_bad.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  let xs = [1, 2]\n"
+        "  let s = join(xs, \",\")\n"
+        "}\n"));
+    expect_error("build/_check_join_bad.idem", "String elements");
+    remove("build/_check_join_bad.idem");
+}
+
 static void test_errors(void)
 {
     CHECK(write_file("build/_check_arith.idem",
@@ -361,6 +382,7 @@ int check_test_run(void)
     test_valid_program();
     test_struct_shorthand_binding();
     test_to_int_char();
+    test_join_builtin();
     test_errors();
 
     if (failures != 0) {

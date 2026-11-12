@@ -172,6 +172,7 @@ Value idem_set(Value collection, Value index, Value value);
 Value idem_remove(Value map, Value key);
 Value idem_push(Value list, Value value);
 Value idem_concat(Value a, Value b);
+Value idem_join(Value collection, Value separator);
 Value idem_map(Value collection, Value function,
                const IdemTypeDesc *result_type);
 Value idem_filter(Value collection, Value function);

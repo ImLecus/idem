@@ -257,6 +257,77 @@ Value idem_concat(Value a, Value b)
     return idem_unit();
 }
 
+Value idem_join(Value collection, Value separator)
+{
+    IdemSeqObj *seq;
+    IdemStringObj *sep;
+    size_t total;
+    size_t position;
+    size_t i;
+    char *data;
+    Value result;
+
+    if (collection.tag != IDEM_TAG_ARRAY &&
+        collection.tag != IDEM_TAG_LIST) {
+        idem_panic_str("join expects an Array or List");
+    }
+    if (separator.tag != IDEM_TAG_STRING) {
+        idem_panic_str("join expects a String separator");
+    }
+
+    seq = idem_as_seq(collection, "expected an Array or List");
+    sep = (IdemStringObj *)separator.as.obj;
+
+    total = 0;
+    for (i = 0; i < seq->count; i++) {
+        IdemStringObj *item;
+        size_t extra;
+
+        if (seq->items[i].tag != IDEM_TAG_STRING) {
+            idem_panic_str("join expects String elements");
+        }
+        item = (IdemStringObj *)seq->items[i].as.obj;
+        extra = item->length;
+        if (i != 0) {
+            if (sep->length > ((size_t)-1) - extra) {
+                idem_panic_str("joined string is too large");
+            }
+            extra += sep->length;
+        }
+        if (extra > ((size_t)-1) - total) {
+            idem_panic_str("joined string is too large");
+        }
+        total += extra;
+    }
+
+    if (total == (size_t)-1) {
+        idem_panic_str("joined string is too large");
+    }
+
+    data = (char *)malloc(total + 1);
+    if (data == NULL) {
+        idem_panic_oom();
+    }
+
+    position = 0;
+    for (i = 0; i < seq->count; i++) {
+        IdemStringObj *item;
+
+        item = (IdemStringObj *)seq->items[i].as.obj;
+        if (i != 0) {
+            memcpy(data + position, sep->data, sep->length);
+            position += sep->length;
+        }
+        memcpy(data + position, item->data, item->length);
+        position += item->length;
+    }
+    data[position] = '\0';
+
+    result = idem_string(data, total);
+    free(data);
+    return result;
+}
+
 Value idem_map(Value collection, Value function,
                const IdemTypeDesc *result_type)
 {

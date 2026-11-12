@@ -3237,8 +3237,8 @@ static void check_match_exhaustive(TypeChecker *c, AstExpr *expr,
 static const char *BUILTIN_FUNCTIONS[] = {
     "print", "println", "readLine", "readFile", "writeFile", "flush",
     "exit", "panic",
-    "len", "get", "set", "remove", "push", "concat", "map", "filter",
-    "fold", "sum", "keys", "values",
+    "len", "get", "set", "remove", "push", "concat", "join", "map",
+    "filter", "fold", "sum", "keys", "values",
     "abs", "min", "max", "sqrt", "floor", "ceil", "pow", "random", "now",
     "byteAt", "slice", "compare", "charAt", "chars", "toInt", "toFloat",
     "toString", "toBytes", "fromBytes"
@@ -3289,12 +3289,23 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
     int argc;
     Type *result;
     size_t name_len;
+    Type *first_expected;
 
     name_len = expr->as.call.callee->as.var.name_len;
+    first_expected = NULL;
+    if (name_eq(name, name_len, "join") && args != NULL) {
+        if (args->expr->kind == EXPR_ARRAY) {
+            first_expected = type_array(c->arena, c->resolver->ty_string);
+        } else if (args->expr->kind == EXPR_LIST) {
+            first_expected = type_list_of(c->arena, c->resolver->ty_string);
+        }
+    }
+
     argc = 0;
     for (it = args; it != NULL; it = it->next) {
         if (argc < 4) {
-            argv[argc] = check_expr(c, it->expr, NULL);
+            argv[argc] = check_expr(c, it->expr,
+                                    argc == 0 ? first_expected : NULL);
         }
         argc += 1;
     }
@@ -3402,6 +3413,30 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
             checker_error(c, span, "'concat' expects matching collections");
             return c->resolver->ty_error;
         }
+    } else if (name_eq(name, name_len, "join")) {
+        Type *element;
+
+        if (!builtin_arg_count(c, span, name, name_len, argc, 2)) return c->resolver->ty_error;
+
+        if (argv[0]->kind == TY_ARRAY) {
+            element = argv[0]->as.array.element;
+        } else if (argv[0]->kind == TY_LIST) {
+            element = argv[0]->as.list.element;
+        } else if (argv[0]->kind == TY_ERROR) {
+            return c->resolver->ty_error;
+        } else {
+            checker_error(c, span,
+                          "'join' expects an Array[String] or List[String]");
+            return c->resolver->ty_error;
+        }
+
+        if (!type_equivalent(element, c->resolver->ty_string)) {
+            checker_error(c, span, "'join' requires String elements");
+            return c->resolver->ty_error;
+        }
+
+        check_expected(c, span, argv[1], c->resolver->ty_string);
+        result = c->resolver->ty_string;
     } else if (name_eq(name, name_len, "slice")) {
         if (!builtin_arg_count(c, span, name, name_len, argc, 3)) return c->resolver->ty_error;
         if (argv[0]->kind != TY_STRING && argv[0]->kind != TY_BYTES) {
