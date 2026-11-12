@@ -101,6 +101,7 @@ src/
     check.c/.h      bidirectional type checker
     ir.c/.h         typed AST lowering to a slot-based IR
     codegen.c/.h    C89 emission
+    version.h       compiler and language version strings
 runtime/
     value.h         Value representation, tags, and runtime API
     internal.h      heap object layouts and internal helpers
@@ -116,6 +117,8 @@ tests/
     golden/         .idem programs with expected stdout/stderr/exit
     errors/         .idem programs with expected diagnostics
     run_golden.sh   golden test runner
+    run_cli.sh      command-line interface tests
+    run_reloc.sh    relocatable runtime test
 benchmarks/
     README.md       benchmark methodology and knobs
     compiler_bench.c in-process phase timing
@@ -132,7 +135,7 @@ LICENSE
 
 ## 4. Driver and CLI
 
-`src/main.c` implements the single command:
+`src/main.c` implements the single compilation command:
 
 ```
 idem file.idem [program arguments...]
@@ -143,24 +146,36 @@ Steps:
 1. Read `file.idem` as UTF-8.
 2. Run the compiler pipeline.
 3. If there are errors, print diagnostics to stderr and exit 1.
-4. Write the generated C89 to a temporary file with a `.c` suffix.
-5. Invoke the system C compiler:
+4. Create a private temporary directory with `mkdtemp` and write the
+   generated C89 to `main.c` inside it.
+5. Resolve the runtime source directory:
+   - `$IDEM_RUNTIME_DIR` when set;
+   - otherwise `../lib/idem/runtime` or `runtime` relative to the
+     executable;
+   - otherwise the build-tree location compiled into the driver.
+6. Invoke the system C compiler:
    - use `$CC` if set, otherwise `cc`;
-   - compile the generated C file together with the runtime sources in `runtime/`;
+   - compile the generated C file together with the runtime sources in
+     the resolved runtime directory;
    - pass `-std=c89 -pedantic -Wall -Wextra -O2` for the reference build;
    - produce a temporary executable.
-6. Run the executable with the remaining program arguments.
-7. Forward the program's exit status.
-8. Delete the temporary files unless `IDEM_KEEP_C` is set.
+7. Run the executable with the remaining program arguments using
+   `fork` and `execv`, so arguments are forwarded without shell parsing.
+8. Forward the program's exit status.
+9. Delete the temporary directory unless `IDEM_KEEP_C` is set.
 
 Usage errors exit with status 2. Compile errors exit with status 1. A program that calls `panic` exits with 101. A normal `main` exits with 0 unless the program calls `exit`.
 
-The driver also supports two inspection modes:
+The driver also supports inspection and metadata modes:
 
 - `idem --tokens file.idem` prints the token stream;
-- `idem --emit-c file.idem` prints the generated C89.
+- `idem --emit-c file.idem` prints the generated C89;
+- `idem --version` prints `idem 1.0.0 (Idem2026)`;
+- `idem --help` prints usage and environment variables.
 
-The driver does not need a build system, a manifest, or a package manager in `idem 1.0.0`.
+The driver requires a POSIX platform for `mkdtemp`, `fork`, and `execv`;
+the generated code and runtime remain strict C89. The driver does not
+need a build system, a manifest, or a package manager in `idem 1.0.0`.
 
 ---
 

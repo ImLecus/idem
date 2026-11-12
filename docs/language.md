@@ -1291,7 +1291,9 @@ The reference runtime and generated code are strict C89:
 - 64-bit integers are implemented with two 32-bit words or with a platform `long` verified to be 64 bits;
 - `double` is assumed to be IEEE-754 binary64; platforms where it is not are unsupported for exact `Float` semantics;
 - `size_t` comes from `stddef.h`;
-- the runtime and compiler use only the C89 standard library plus the platform's C compiler.
+- the runtime and generated code use only the C89 standard library; the
+  compiler driver additionally uses POSIX interfaces for temporary files
+  and process execution.
 
 ---
 
@@ -1311,7 +1313,7 @@ The reference compiler is written in strict C89 and organized as a modular pipel
 
 ### 11.2. Command-line interface
 
-`idem 1.0.0` provides a single command:
+`idem 1.0.0` provides a single compilation command:
 
 ```
 idem file.idem
@@ -1320,14 +1322,24 @@ idem file.idem
 The compiler:
 
 1. parses and type-checks `file.idem`;
-2. emits a C89 translation unit;
-3. invokes the system C compiler (the `CC` environment variable, or `cc` by default);
-4. runs the resulting executable with the remaining command-line arguments;
-5. forwards the program's exit status.
+2. emits a C89 translation unit in a private temporary directory;
+3. resolves the runtime sources from `IDEM_RUNTIME_DIR`, then from
+   `../lib/idem/runtime` or `runtime` relative to the executable, then
+   from the build-tree location;
+4. invokes the system C compiler (the `CC` environment variable, or `cc` by default);
+5. runs the resulting executable with the remaining command-line arguments;
+6. forwards the program's exit status.
 
 Compile errors are printed to stderr and cause exit status 1. Usage errors cause exit status 2. A program that calls `panic` exits with 101.
 
-The driver may keep the generated C file for debugging when the `IDEM_KEEP_C` environment variable is set. It also supports `--tokens` to print the token stream and `--emit-c` to print the generated C89. Additional flags such as `--check` may be added in later versions; they are not part of the 1.0 interface.
+The driver may keep the generated C file and executable for debugging when the `IDEM_KEEP_C` environment variable is set. It also supports:
+
+- `--tokens` to print the token stream and exit;
+- `--emit-c` to print the generated C89 and exit;
+- `--version` to print `idem 1.0.0 (Idem2026)`;
+- `--help` to print usage and environment variables.
+
+Additional flags such as `--check` may be added in later versions; they are not part of the 1.0 interface.
 
 ### 11.3. Diagnostics
 
@@ -1360,11 +1372,13 @@ The repository uses a `Makefile`:
 
 ```
 make        # builds the idem compiler
-make test   # runs unit tests and golden tests
+make test   # runs unit tests
+make golden # runs golden tests
+make cli    # runs command-line and relocation tests
 make clean
 ```
 
-Golden tests are `.idem` programs with expected stdout, stderr, and exit status. Unit tests cover the lexer, parser, resolver, type checker, and selected runtime operations. The acceptance tests compile and run the programs in `examples/`.
+Golden tests are `.idem` programs with expected stdout, stderr, and exit status. Unit tests cover the lexer, parser, resolver, type checker, and selected runtime operations. The CLI tests check `--version`, `--help`, usage errors, argument forwarding, temporary-file cleanup, and relocation. The acceptance tests compile and run the programs in `examples/`.
 
 ### 11.6. Bootstrap and self-hosting
 
@@ -1407,7 +1421,7 @@ A conforming implementation must pass the conformance suite, which includes:
 - the compiler builds with a strict C89 compiler;
 - `examples/hello.idem`, `examples/factorial.idem`, `examples/fibonacci.idem`, `examples/shapes.idem`, and `examples/collections.idem` compile and produce the expected output;
 - type errors are reported with file, line, and column;
-- `make test` passes.
+- `make test`, `make golden`, and `make cli` pass.
 
 ### 12.3. Versioning
 
