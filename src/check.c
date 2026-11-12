@@ -3444,10 +3444,13 @@ static Type *check_builtin(TypeChecker *c, AstExpr *expr,
         if (argv[0]->kind == TY_STRING || argv[0]->kind == TY_FLOAT) {
             result = union_pair(c, c->resolver->ty_int,
                                 c->resolver->ty_unit);
+        } else if (argv[0]->kind == TY_CHAR) {
+            result = c->resolver->ty_int;
         } else if (argv[0]->kind == TY_ERROR) {
             result = c->resolver->ty_error;
         } else {
-            checker_error(c, span, "'toInt' expects a String or Float");
+            checker_error(c, span,
+                          "'toInt' expects a String, Float, or Char");
             result = c->resolver->ty_error;
         }
     } else if (name_eq(name, name_len, "toFloat")) {
