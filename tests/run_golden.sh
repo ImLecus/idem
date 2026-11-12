@@ -4,7 +4,7 @@
 # compare stdout, stderr, and the exit status with the expected files.
 
 root=$(cd "$(dirname "$0")/.." && pwd) || exit 1
-tmpdir=$(mktemp -d) || exit 1
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/idem.XXXXXX") || exit 1
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 failures=0

@@ -33,7 +33,7 @@ The normative specification is in [docs/language.md](docs/language.md), and the 
 src/        C89 compiler sources (lexer, parser, resolver, checker, IR, codegen)
 runtime/    C89 runtime, collections, printing, I/O, and mark-sweep GC
 benchmarks/ compiler-phase and generated-program performance suite
-tests/      unit tests, golden tests, and error tests
+tests/      unit tests and golden tests
 examples/   example Idem programs
 docs/       language specification and compiler guide
 private/    design notes and decision log
@@ -72,6 +72,19 @@ executable for inspection. The driver uses `$CC` when set, otherwise
 `cc`. It finds the runtime sources in `$IDEM_RUNTIME_DIR` when set, then
 in `../lib/idem/runtime` or `runtime` relative to the executable, and
 finally in the build-tree location.
+
+## Releases
+
+Tags matching `v*` trigger `.github/workflows/release.yml`. The workflow
+verifies the tag against `IDEM_VERSION` in `src/version.h`, runs the test
+suite, and publishes a source tarball plus Linux (x86_64/aarch64, static)
+and macOS (x86_64/arm64) binary bundles, together with `SHA256SUMS`.
+
+Each binary bundle contains `bin/idem`, `lib/idem/runtime`, the
+documentation, and the examples. The compiler is precompiled but still
+requires a system C compiler and the bundled runtime sources to build
+generated programs. Install both paths under the same prefix: the driver
+looks for `../lib/idem/runtime` relative to `bin/idem`.
 
 ## Benchmarks
 

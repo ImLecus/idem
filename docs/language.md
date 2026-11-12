@@ -1288,7 +1288,7 @@ The reference runtime and generated code are strict C89:
 - no declarations after statements;
 - no variable-length arrays;
 - no `long long`, `stdint.h`, `inline`, designated initializers, or compound literals;
-- 64-bit integers are implemented with two 32-bit words or with a platform `long` verified to be 64 bits;
+- 64-bit integers use a portable four-limb representation in the compiler; the reference runtime requires a `long` type of 64 bits;
 - `double` is assumed to be IEEE-754 binary64; platforms where it is not are unsupported for exact `Float` semantics;
 - `size_t` comes from `stddef.h`;
 - the runtime and generated code use only the C89 standard library; the
@@ -1410,7 +1410,7 @@ A conforming implementation must pass the conformance suite, which includes:
 - lexical and syntactic acceptance/rejection tests;
 - type-checking tests, including joins, unions, subtyping, and exhaustiveness;
 - runtime tests for integers, floats, strings, collections, structs, enums, and pattern matching;
-- error tests for division by zero, overflow, out-of-bounds access, and panics;
+- runtime error behavior for division by zero, overflow, out-of-bounds access, and panics;
 - module tests for imports and cycles;
 - built-in tests for I/O, collections, and non-deterministic functions (with controlled expectations).
 

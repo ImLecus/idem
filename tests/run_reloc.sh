@@ -10,7 +10,7 @@ if [ -z "$idem" ]; then
     exit 1
 fi
 
-tmpdir=$(mktemp -d) || exit 1
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/idem.XXXXXX") || exit 1
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 prefix="$tmpdir/prefix"

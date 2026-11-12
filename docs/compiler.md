@@ -47,16 +47,17 @@ typedef signed   short i16;
 typedef unsigned long  u32;
 typedef signed   long  i32;
 
-#if defined(IDEM_HAS_LONG64)
-typedef unsigned long      u64;
-typedef signed   long      i64;
-#else
-typedef struct { u32 lo, hi; } u64;
-typedef struct { u32 lo, hi; } i64;
-#endif
+typedef struct u64 {
+    u16 w[4]; /* little-endian limbs */
+} u64;
 ```
 
-On platforms where `long` is 64 bits, the compiler can use it directly for `Int`; otherwise it uses the two-word representation and the helper functions in `runtime/i64.c` for arithmetic, comparison, shifting, and conversion. The runtime must verify the assumption at startup or at build time.
+`u32` is at least 32 bits; on LP64 it is 64 bits wide, which is harmless
+for the uses in the compiler. `u64` is a portable four-limb
+representation so the lexer does not depend on `long long`. The runtime
+uses `long` for `Int` and requires it to be 64 bits; `runtime/value.c`
+checks this at build time. There is no two-word runtime fallback in
+`idem 1.0.0`.
 
 ### 2.2. Source locations
 
@@ -115,7 +116,6 @@ runtime/
 tests/
     unit/           lexer, parser, resolver, checker tests
     golden/         .idem programs with expected stdout/stderr/exit
-    errors/         .idem programs with expected diagnostics
     run_golden.sh   golden test runner
     run_cli.sh      command-line interface tests
     run_reloc.sh    relocatable runtime test
@@ -897,11 +897,7 @@ The test runner (`tests/run_golden.sh`, invoked by `make golden`) compiles and r
 - `shapes.idem`
 - `collections.idem`
 
-### 12.4. Error tests
-
-Error tests contain an `.idem` file and an `errors.txt` file with expected diagnostics. The runner compares file, line, column, and message.
-
-### 12.5. Benchmarks
+### 12.4. Benchmarks
 
 `benchmarks/` contains performance inputs and runners:
 
@@ -911,7 +907,7 @@ Error tests contain an `.idem` file and an `errors.txt` file with expected diagn
 
 The compiler benchmark runs the pipeline in-process. The runtime benchmark excludes C compilation by generating and building each workload once before timing repeated executions. See `benchmarks/README.md` for workload sizes and environment variables.
 
-### 12.6. Future testing
+### 12.5. Future testing
 
 - Property-based tests for union normalization and subtyping.
 - Fuzzing for the lexer and parser.

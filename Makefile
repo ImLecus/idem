@@ -132,8 +132,8 @@ $(BUILD)/unit/%.o: tests/unit/%.c
 check: clean compiler
 
 dirs:
-	@mkdir -p src runtime tests/unit tests/golden tests/errors $(OBJDIR) $(RUNTIME_DIR)
-	@touch runtime/.gitkeep tests/golden/.gitkeep tests/errors/.gitkeep
+	@mkdir -p src runtime tests/unit tests/golden $(OBJDIR) $(RUNTIME_DIR)
+	@touch runtime/.gitkeep tests/golden/.gitkeep
 
 clean:
 	rm -rf $(BUILD) $(BIN)
