@@ -887,13 +887,13 @@ static Token lex_char(Lexer *lx, Span start)
 /* Trivia                                                              */
 /* ------------------------------------------------------------------ */
 
-static int skip_trivia(Lexer *lx, Span *err_span)
+static void skip_trivia(Lexer *lx)
 {
     for (;;) {
         unsigned char c;
 
         if (lx->pos >= lx->len) {
-            return 1;
+            return;
         }
 
         c = lx->src[lx->pos];
@@ -904,12 +904,10 @@ static int skip_trivia(Lexer *lx, Span *err_span)
         }
 
         if (is_newline_char(c)) {
-            return 1;
+            return;
         }
 
-        if (c == '-' && lx->pos + 1 < lx->len &&
-            lx->src[lx->pos + 1] == '-') {
-            advance_ascii(lx);
+        if (c == '#') {
             advance_ascii(lx);
             while (lx->pos < lx->len &&
                    !is_newline_char(lx->src[lx->pos])) {
@@ -918,47 +916,8 @@ static int skip_trivia(Lexer *lx, Span *err_span)
             continue;
         }
 
-        if (c == '{' && lx->pos + 1 < lx->len &&
-            lx->src[lx->pos + 1] == '-') {
-            Span start;
-            int depth;
-
-            start = span_at(lx);
-            depth = 0;
-
-            while (lx->pos < lx->len) {
-                if (lx->pos + 1 < lx->len &&
-                    lx->src[lx->pos] == '{' &&
-                    lx->src[lx->pos + 1] == '-') {
-                    advance_ascii(lx);
-                    advance_ascii(lx);
-                    depth += 1;
-                } else if (lx->pos + 1 < lx->len &&
-                           lx->src[lx->pos] == '-' &&
-                           lx->src[lx->pos + 1] == '}') {
-                    advance_ascii(lx);
-                    advance_ascii(lx);
-                    depth -= 1;
-                    if (depth == 0) {
-                        break;
-                    }
-                } else if (is_newline_char(lx->src[lx->pos])) {
-                    advance_newline(lx);
-                } else {
-                    advance_char(lx);
-                }
-            }
-
-            if (depth != 0) {
-                *err_span = start;
-                return 0;
-            }
-            continue;
-        }
-
         break;
     }
-    return 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1047,10 +1006,7 @@ Token lexer_next(Lexer *lx)
         return make_token(TOK_EOF, bad);
     }
 
-    span = span_at(lx);
-    if (!skip_trivia(lx, &span)) {
-        return make_error(span, "unterminated block comment");
-    }
+    skip_trivia(lx);
 
     span = span_at(lx);
 
