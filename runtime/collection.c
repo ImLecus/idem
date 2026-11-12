@@ -1,5 +1,6 @@
 #include "internal.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -258,8 +259,7 @@ Value idem_concat(Value a, Value b)
 }
 
 Value idem_join(Value collection, Value separator)
-{
-    IdemSeqObj *seq;
+{    IdemSeqObj *seq;
     IdemStringObj *sep;
     size_t total;
     size_t position;
@@ -326,6 +326,275 @@ Value idem_join(Value collection, Value separator)
     result = idem_string(data, total);
     free(data);
     return result;
+}
+
+Value idem_has(Value map_value, Value key)
+{
+    IdemMapObj *map;
+    size_t i;
+
+    map = idem_as_map(map_value);
+    for (i = 0; i < map->count; i++) {
+        if (idem_value_equal(map->keys[i], key)) {
+            return idem_bool(1);
+        }
+    }
+    return idem_bool(0);
+}
+
+static int idem_raw_contains(const char *haystack, size_t haystack_len,
+                             const char *needle, size_t needle_len)
+{
+    size_t i;
+
+    if (needle_len == 0) {
+        return 1;
+    }
+    if (needle_len > haystack_len) {
+        return 0;
+    }
+    for (i = 0; i + needle_len <= haystack_len; i++) {
+        if (memcmp(haystack + i, needle, needle_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+Value idem_contains(Value collection, Value needle)
+{
+    size_t i;
+
+    if (collection.tag == IDEM_TAG_STRING ||
+        collection.tag == IDEM_TAG_BYTES) {
+        IdemStringObj *haystack;
+        IdemStringObj *needle_obj;
+
+        if (collection.tag != needle.tag) {
+            idem_panic_str("contains expects matching types");
+        }
+        haystack = (IdemStringObj *)collection.as.obj;
+        needle_obj = (IdemStringObj *)needle.as.obj;
+        return idem_bool(idem_raw_contains(haystack->data, haystack->length,
+                                           needle_obj->data,
+                                           needle_obj->length));
+    }
+
+    if (collection.tag == IDEM_TAG_ARRAY ||
+        collection.tag == IDEM_TAG_LIST) {
+        IdemSeqObj *seq;
+
+        seq = idem_as_seq(collection, "expected an Array or List");
+        for (i = 0; i < seq->count; i++) {
+            if (idem_value_equal(seq->items[i], needle)) {
+                return idem_bool(1);
+            }
+        }
+        return idem_bool(0);
+    }
+
+    idem_panic_str("contains expects String, Bytes, Array, or List");
+    return idem_bool(0);
+}
+
+Value idem_for_each(Value collection, Value function)
+{
+    IdemSeqObj *seq;
+    size_t i;
+
+    if (collection.tag != IDEM_TAG_ARRAY &&
+        collection.tag != IDEM_TAG_LIST) {
+        idem_panic_str("forEach expects an Array or List");
+    }
+    seq = idem_as_seq(collection, "expected an Array or List");
+
+    for (i = 0; i < seq->count; i++) {
+        Value args[1];
+        args[0] = seq->items[i];
+        (void)idem_value_call(function, args, 1);
+    }
+    return idem_unit();
+}
+
+static int idem_sort_compare(Value a, Value b, Value comparator,
+                             int use_comparator)
+{
+    if (use_comparator) {
+        Value args[2];
+        Value result;
+        args[0] = a;
+        args[1] = b;
+        result = idem_value_call(comparator, args, 2);
+        if (result.as.i < 0) {
+            return -1;
+        }
+        if (result.as.i > 0) {
+            return 1;
+        }
+        return 0;
+    }
+    return idem_value_compare(a, b);
+}
+
+static void idem_merge_sort(Value *items, Value *tmp, size_t count,
+                            Value comparator, int use_comparator)
+{
+    size_t middle;
+    size_t left;
+    size_t right;
+    size_t out;
+
+    if (count < 2) {
+        return;
+    }
+
+    middle = count / 2;
+    idem_merge_sort(items, tmp, middle, comparator, use_comparator);
+    idem_merge_sort(items + middle, tmp, count - middle, comparator,
+                    use_comparator);
+
+    left = 0;
+    right = middle;
+    out = 0;
+    while (left < middle && right < count) {
+        if (idem_sort_compare(items[right], items[left], comparator,
+                              use_comparator) < 0) {
+            tmp[out++] = items[right++];
+        } else {
+            tmp[out++] = items[left++];
+        }
+    }
+    while (left < middle) {
+        tmp[out++] = items[left++];
+    }
+    while (right < count) {
+        tmp[out++] = items[right++];
+    }
+    idem_copy_values(items, tmp, count);
+}
+
+static Value idem_sort_impl(Value collection, Value comparator,
+                            int use_comparator)
+{
+    IdemSeqObj *seq;
+    Value *items;
+    Value *tmp;
+    Value result;
+
+    if (collection.tag != IDEM_TAG_ARRAY &&
+        collection.tag != IDEM_TAG_LIST) {
+        idem_panic_str("sort expects an Array or List");
+    }
+    seq = idem_as_seq(collection, "expected an Array or List");
+
+    if (seq->count < 2) {
+        return idem_seq_like(collection.tag, seq->items, seq->count,
+                             seq->type);
+    }
+
+    items = (Value *)malloc(sizeof(Value) * seq->count);
+    tmp = (Value *)malloc(sizeof(Value) * seq->count);
+    if (items == NULL || tmp == NULL) {
+        free(items);
+        free(tmp);
+        idem_panic_oom();
+    }
+
+    idem_copy_values(items, seq->items, seq->count);
+    idem_merge_sort(items, tmp, seq->count, comparator, use_comparator);
+    result = idem_seq_like(collection.tag, items, seq->count, seq->type);
+    free(items);
+    free(tmp);
+    return result;
+}
+
+Value idem_sort(Value collection)
+{
+    return idem_sort_impl(collection, idem_unit(), 0);
+}
+
+Value idem_sort_by(Value collection, Value comparator)
+{
+    return idem_sort_impl(collection, comparator, 1);
+}
+
+static Value idem_range_impl(Value start_value, Value end_value,
+                             Value step_value, const IdemTypeDesc *type)
+{
+    IdemInt start;
+    IdemInt end;
+    IdemInt step;
+    IdemInt current;
+    size_t count;
+    size_t i;
+    Value *items;
+    Value result;
+
+    if (start_value.tag != IDEM_TAG_INT ||
+        end_value.tag != IDEM_TAG_INT ||
+        step_value.tag != IDEM_TAG_INT) {
+        idem_panic_str("range expects Int arguments");
+    }
+
+    start = start_value.as.i;
+    end = end_value.as.i;
+    step = step_value.as.i;
+    if (step == 0) {
+        idem_panic_str("range step cannot be zero");
+    }
+
+    count = 0;
+    current = start;
+    while (step > 0 ? current < end : current > end) {
+        count += 1;
+        if (step > 0) {
+            if (current > LONG_MAX - step) {
+                break;
+            }
+        } else {
+            if (current < LONG_MIN - step) {
+                break;
+            }
+        }
+        current += step;
+    }
+
+    if (count == 0) {
+        return idem_array(NULL, 0, type);
+    }
+    if (count > ((size_t)-1) / sizeof(Value)) {
+        idem_panic_str("range is too large");
+    }
+
+    items = (Value *)malloc(sizeof(Value) * count);
+    if (items == NULL) {
+        idem_panic_oom();
+    }
+
+    current = start;
+    i = 0;
+    while (i < count) {
+        items[i] = idem_int(current);
+        i += 1;
+        if (i < count) {
+            current += step;
+        }
+    }
+
+    result = idem_array(items, count, type);
+    free(items);
+    return result;
+}
+
+Value idem_range(Value start, Value end, const IdemTypeDesc *type)
+{
+    return idem_range_impl(start, end, idem_int(1), type);
+}
+
+Value idem_range_step(Value start, Value end, Value step,
+                      const IdemTypeDesc *type)
+{
+    return idem_range_impl(start, end, step, type);
 }
 
 Value idem_map(Value collection, Value function,

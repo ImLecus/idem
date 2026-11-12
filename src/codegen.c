@@ -725,6 +725,36 @@ static void cg_builtin_call(Codegen *cg, CgBuf *buf, IrExpr *expr)
     } else if (cg_name_eq(name, len, "join")) {
         cg_printf(buf, "idem_join(slots[%d], slots[%d])",
                   args[0], args[1]);
+    } else if (cg_name_eq(name, len, "has")) {
+        cg_printf(buf, "idem_has(slots[%d], slots[%d])",
+                  args[0], args[1]);
+    } else if (cg_name_eq(name, len, "range")) {
+        if (expr->as.builtin.argc == 1) {
+            cg_printf(buf, "idem_range(idem_int(0), slots[%d], ",
+                      args[0]);
+        } else if (expr->as.builtin.argc == 2) {
+            cg_printf(buf, "idem_range(slots[%d], slots[%d], ",
+                      args[0], args[1]);
+        } else {
+            cg_printf(buf, "idem_range_step(slots[%d], slots[%d], "
+                           "slots[%d], ",
+                      args[0], args[1], args[2]);
+        }
+        cg_type_ref(cg, buf, expr->type);
+        cg_putc(buf, ')');
+    } else if (cg_name_eq(name, len, "forEach")) {
+        cg_printf(buf, "idem_for_each(slots[%d], slots[%d])",
+                  args[0], args[1]);
+    } else if (cg_name_eq(name, len, "sort")) {
+        if (expr->as.builtin.argc == 1) {
+            cg_printf(buf, "idem_sort(slots[%d])", args[0]);
+        } else {
+            cg_printf(buf, "idem_sort_by(slots[%d], slots[%d])",
+                      args[0], args[1]);
+        }
+    } else if (cg_name_eq(name, len, "contains")) {
+        cg_printf(buf, "idem_contains(slots[%d], slots[%d])",
+                  args[0], args[1]);
     } else if (cg_name_eq(name, len, "map")) {
         cg_printf(buf, "idem_map(slots[%d], slots[%d], ",
                   args[0], args[1]);
@@ -823,6 +853,22 @@ static void cg_builtin_call(Codegen *cg, CgBuf *buf, IrExpr *expr)
         cg_printf(buf, "idem_to_bytes(slots[%d])", args[0]);
     } else if (cg_name_eq(name, len, "fromBytes")) {
         cg_printf(buf, "idem_from_bytes(slots[%d])", args[0]);
+    } else if (cg_name_eq(name, len, "split")) {
+        cg_printf(buf, "idem_split(slots[%d], slots[%d], ",
+                  args[0], args[1]);
+        cg_type_ref(cg, buf, expr->type);
+        cg_putc(buf, ')');
+    } else if (cg_name_eq(name, len, "trim")) {
+        cg_printf(buf, "idem_trim(slots[%d])", args[0]);
+    } else if (cg_name_eq(name, len, "startsWith")) {
+        cg_printf(buf, "idem_starts_with(slots[%d], slots[%d])",
+                  args[0], args[1]);
+    } else if (cg_name_eq(name, len, "endsWith")) {
+        cg_printf(buf, "idem_ends_with(slots[%d], slots[%d])",
+                  args[0], args[1]);
+    } else if (cg_name_eq(name, len, "replace")) {
+        cg_printf(buf, "idem_replace(slots[%d], slots[%d], slots[%d])",
+                  args[0], args[1], args[2]);
     } else {
         cg_printf(buf, "idem_unit() /* unknown builtin %.*s */",
                   (int)len, name);

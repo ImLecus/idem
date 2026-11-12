@@ -173,6 +173,14 @@ Value idem_remove(Value map, Value key);
 Value idem_push(Value list, Value value);
 Value idem_concat(Value a, Value b);
 Value idem_join(Value collection, Value separator);
+Value idem_has(Value map, Value key);
+Value idem_range(Value start, Value end, const IdemTypeDesc *type);
+Value idem_range_step(Value start, Value end, Value step,
+                      const IdemTypeDesc *type);
+Value idem_for_each(Value collection, Value function);
+Value idem_sort(Value collection);
+Value idem_sort_by(Value collection, Value comparator);
+Value idem_contains(Value collection, Value needle);
 Value idem_map(Value collection, Value function,
                const IdemTypeDesc *result_type);
 Value idem_filter(Value collection, Value function);
@@ -203,6 +211,12 @@ Value idem_to_float(Value value);
 Value idem_to_string(Value value);
 Value idem_to_bytes(Value value);
 Value idem_from_bytes(Value value);
+Value idem_split(Value value, Value separator,
+                 const IdemTypeDesc *type);
+Value idem_trim(Value value);
+Value idem_starts_with(Value value, Value prefix);
+Value idem_ends_with(Value value, Value suffix);
+Value idem_replace(Value value, Value old_value, Value new_value);
 
 /* ------------------------------------------------------------------ */
 /* Rendering and panic helpers                                         */
