@@ -731,7 +731,7 @@ The runtime provides:
   `idem_compare`, `idem_byte_at`, `idem_char_at`, `idem_chars`,
   `idem_to_bytes`, `idem_from_bytes`;
 - `idem_array`, `idem_list`, `idem_map_lit`, `idem_get`, `idem_set`,
-  `idem_remove`, `idem_push`, `idem_concat`;
+  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`;
 - `idem_map`, `idem_filter`, `idem_fold`, `idem_sum_int`,
   `idem_sum_float`, `idem_keys`, `idem_values`;
 - `idem_print`, `idem_to_string`, `idem_panic`.
