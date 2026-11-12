@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CFLAGS: -std=c89 -pedantic -Wall -Wextra -Werror -Wdeclaration-after-statement -O2 -g
+
+jobs:
+  source:
+    name: Source tarball
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          header=$(sed -n 's/^#define IDEM_VERSION "\(.*\)"/\1/p' src/version.h)
+          if [ "$version" != "$header" ]; then
+            echo "tag '$version' does not match src/version.h '$header'" >&2
+            exit 1
+          fi
+
+      - name: Create source tarball
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          git archive --format=tar.gz \
+            --prefix="idem-$version/" \
+            -o "dist/idem-$version-source.tar.gz" HEAD
+
+      - name: Upload source tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: dist/idem-*-source.tar.gz
+          if-no-files-found: error
+
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            ldflags: -static
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+            ldflags: -static
+          - os: macos-15-intel
+            platform: macos-x86_64
+            ldflags: ''
+          - os: macos-15
+            platform: macos-arm64
+            ldflags: ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          header=$(sed -n 's/^#define IDEM_VERSION "\(.*\)"/\1/p' src/version.h)
+          if [ "$version" != "$header" ]; then
+            echo "tag '$version' does not match src/version.h '$header'" >&2
+            exit 1
+          fi
+
+      - name: Build and test
+        env:
+          LDFLAGS: ${{ matrix.ldflags }}
+        run: make test golden cli
+
+      - name: Package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="idem-$version-${{ matrix.platform }}"
+          mkdir -p "dist/$name/bin" \
+                   "dist/$name/lib/idem/runtime" \
+                   "dist/$name/share/doc/idem/docs" \
+                   "dist/$name/examples"
+          cp build/idem-reloc "dist/$name/bin/idem"
+          chmod +x "dist/$name/bin/idem"
+          cp runtime/*.c runtime/*.h "dist/$name/lib/idem/runtime/"
+          cp README.md LICENSE "dist/$name/share/doc/idem/"
+          cp docs/*.md "dist/$name/share/doc/idem/docs/"
+          cp examples/*.idem "dist/$name/examples/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - name: Smoke test package
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="idem-$version-${{ matrix.platform }}"
+          tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/idem-release.XXXXXX")
+          tar -C "$tmp" -xzf "dist/$name.tar.gz"
+          "$tmp/$name/bin/idem" --version \
+            | grep -F "idem $version (Idem2026)"
+          cat > "$tmp/hello.idem" <<'IDEM'
+          fn main(args: Array[String]) -> Unit = println("release ok")
+          IDEM
+          output=$(
+            cd "$tmp" || exit 1
+            unset IDEM_RUNTIME_DIR
+            "$tmp/$name/bin/idem" "$tmp/hello.idem"
+          )
+          test "$output" = "release ok"
+          rm -rf "$tmp"
+
+      - name: Upload binary tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/idem-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs:
+      - source
+      - build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/*.tar.gz dist/SHA256SUMS --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/*.tar.gz dist/SHA256SUMS \
+              --title "idem $version" \
+              --generate-notes
+          fi

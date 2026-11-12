@@ -1,0 +1,33 @@
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+enum Shape {
+    Circle(Float),
+    Rectangle(Float, Float),
+}
+
+type Number = Int | Float
+
+fn area(shape: Shape) -> Float = match shape {
+    Circle(r) => 3.14159 * r * r,
+    Rectangle(w, h) => w * h,
+}
+
+fn describe(n: Number) -> String = match n {
+    i: Int => "integer",
+    f: Float => "float",
+}
+
+fn main(args: Array[String]) -> Unit = {
+    let p = Point { x: 1, y: 2 }
+    let c = Circle(2.0)
+    let r = Rectangle(3.0, 4.0)
+    let n: Number = if true then 1 else 2.0
+
+    println(p)
+    println(area(c))
+    println(area(r))
+    println(describe(n))
+}

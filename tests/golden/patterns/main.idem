@@ -1,0 +1,31 @@
+struct P { x: Int, y: Int }
+enum E { A, B(Int), C(String, Bool) }
+type U = Int | String | E
+
+fn classify(u: U) -> Int = match u {
+  i: Int => i,
+  s: String => len(s),
+  e: E => match e {
+    A => 0,
+    B(n) => n,
+    C(s, b) => if b then len(s) else 0,
+  },
+}
+
+fn pair(p: (Bool, Int)) -> Int = match p {
+  (true, n) => n,
+  (false, _) => 0,
+}
+
+fn main(args: Array[String]) -> Unit = {
+  let p = P { x: 7, y: 3 }
+  let q = match p { P { x, y } => x - y }
+  println(q)
+  println(pair((true, 9)))
+  println(pair((false, 9)))
+  println(classify(5))
+  println(classify("abcd"))
+  println(classify(B(12)))
+  println(classify(C("hello", true)))
+  println(classify(A))
+}

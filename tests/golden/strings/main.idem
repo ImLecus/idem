@@ -1,0 +1,21 @@
+fn main(args: Array[String]) -> Unit = {
+  let s = "héllo"
+  println(len(s))
+  println(byteAt(s, 0))
+  println(byteAt(s, 99))
+  println(charAt(s, 1))
+  println(charAt(s, 99))
+  println(chars(s))
+  println(slice(s, 0, 3))
+  println(compare("abc", "abd"))
+  println(concat("ab", "cd"))
+  println(toBytes("abc"))
+  println(fromBytes(b"abc"))
+  let bad = b"a\xFF"
+  println(fromBytes(bad))
+  println(toInt("123"))
+  println(toInt("x"))
+  println(toFloat("1.5"))
+  println(toFloat("nan?"))
+  println(toString(42))
+}
