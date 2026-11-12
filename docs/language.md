@@ -511,6 +511,7 @@ A type is **hashable** if it is one of:
 - `slice(s, start, end)` returns a substring by byte offsets. `start` and `end` must be valid UTF-8 boundaries and `0 ≤ start ≤ end ≤ len(s)`; otherwise the call panics.
 - `charAt(s, i)` returns the `i`-th Unicode scalar as a `Char`, or `Unit` if out of range. It is O(n) in the byte length.
 - `chars(s)` returns an `Array[Char]` of the code points.
+- `toInt(c)` returns the Unicode scalar value of a `Char` as an `Int`.
 - `compare(a, b)` compares two strings lexicographically by byte. UTF-8 preserves code-point order, so this is also lexicographic by code point.
 - `toBytes(s)` returns the UTF-8 bytes. `fromBytes(b)` returns `String | Error`, validating UTF-8.
 - String literals are valid UTF-8. `\u{...}` escapes encode the corresponding scalar.
@@ -1015,6 +1016,7 @@ UTF-8.
 | `chars` | `(String) -> Array[Char]` | P | The Unicode scalars of the string, in order. |
 | `toInt` | `(String) -> Int \| Unit` | P | Parses an optional `+` or `-` sign followed by one or more decimal digits, with no surrounding whitespace. Returns `Unit` on invalid input or overflow. |
 | `toInt` | `(Float) -> Int \| Unit` | P | Truncates toward zero. Returns `Unit` if the value is `NaN`, infinite, or outside the `Int` range. |
+| `toInt` | `(Char) -> Int` | P | The Unicode scalar value of the character. |
 | `toFloat` | `(String) -> Float \| Unit` | P | Parses decimal floating-point notation: an optional sign, decimal digits, an optional fractional part, and an optional decimal exponent. No surrounding whitespace. Returns `Unit` on invalid input, overflow, or underflow. |
 | `toFloat` | `(Int) -> Float` | P | Converts exactly with round-to-nearest, ties-to-even. |
 | `toString` | `(Any) -> String` | P | Canonical textual rendering from §9.4. |
@@ -1495,6 +1497,7 @@ charAt      (String, Int) -> Char | Unit
 chars       (String) -> Array[Char]
 toInt       (String) -> Int | Unit
 toInt       (Float) -> Int | Unit
+toInt       (Char) -> Int
 toFloat     (String) -> Float | Unit
 toFloat     (Int) -> Float
 toString    (Any) -> String
