@@ -39,9 +39,12 @@ UNIT_SRC    := $(wildcard tests/unit/*.c)
 UNIT_OBJ    := $(patsubst tests/unit/%.c,$(BUILD)/unit/%.o,$(UNIT_SRC))
 UNIT_BIN    := $(BUILD)/unit-tests
 
+RELOC_MAIN  := $(BUILD)/reloc/main.o
+RELOC_BIN   := $(BUILD)/idem-reloc
+
 COMPILER_BENCH := $(BUILD)/compiler-bench
 
-.PHONY: all compiler runtime test check dirs clean help golden \
+.PHONY: all compiler runtime test check dirs clean help golden cli \
         bench bench-compiler bench-runtime
 
 all: compiler runtime
@@ -59,7 +62,19 @@ $(OBJDIR)/%.o: src/%.c
 	@mkdir -p $(OBJDIR)
 	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
 
+$(OBJDIR)/main.o: src/main.c src/version.h
+	@mkdir -p $(OBJDIR)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
 $(OBJDIR)/main.o: CPPFLAGS += -DIDEM_RUNTIME_DIR=\"$(RUNTIME_DIR_ABS)\"
+
+$(RELOC_MAIN): src/main.c src/version.h
+	@mkdir -p $(BUILD)/reloc
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) \
+		-DIDEM_RUNTIME_DIR=\"/nonexistent-idem-runtime\" -c $< -o $@
+
+$(RELOC_BIN): $(RELOC_MAIN) $(CORE_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(RELOC_MAIN) $(CORE_OBJ) $(LDLIBS)
 
 runtime: $(RUNTIME_LIB)
 
@@ -84,6 +99,10 @@ test: compiler runtime $(UNIT_BIN)
 
 golden: compiler
 	@sh tests/run_golden.sh
+
+cli: compiler $(RELOC_BIN)
+	@IDEM_BIN="$(abspath $(BIN))" sh tests/run_cli.sh
+	@IDEM_RELOC_BIN="$(abspath $(RELOC_BIN))" sh tests/run_reloc.sh
 
 bench: compiler $(COMPILER_BENCH)
 	@sh benchmarks/run.sh all
@@ -126,6 +145,7 @@ help:
 	@echo "  runtime        build build/libidemrt.a when runtime/*.c exists"
 	@echo "  test           build and run unit tests from tests/unit/"
 	@echo "  golden         compile and run golden tests from tests/golden/"
+	@echo "  cli            run command-line and relocation tests"
 	@echo "  bench          run compiler and runtime benchmarks"
 	@echo "  bench-compiler run only the compiler phase benchmark"
 	@echo "  bench-runtime  run only the generated-program benchmarks"

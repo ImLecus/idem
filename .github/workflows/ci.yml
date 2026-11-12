@@ -37,6 +37,9 @@ jobs:
       - name: Run golden tests
         run: make CC=${{ matrix.compiler }} golden
 
+      - name: Run CLI and relocation tests
+        run: make CC=${{ matrix.compiler }} cli
+
       - name: Build and run compiler benchmark
         run: IDEM_BENCH_ITERATIONS=1 make CC=${{ matrix.compiler }} bench-compiler
 

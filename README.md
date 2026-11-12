@@ -47,13 +47,20 @@ LICENSE     MIT
 make            # builds ./idem and the C89 runtime library
 make test       # builds and runs the unit tests
 make golden     # compiles and runs the golden tests
+make cli        # runs command-line and relocation tests
 make bench      # runs compiler-phase and runtime benchmarks
 make help       # lists all targets
 ```
 
+Idem 1.0 targets POSIX systems with a 64-bit `long` and a C89 C compiler.
+The compiler driver uses POSIX interfaces for temporary files and process
+execution; the generated code and runtime remain strict C89.
+
 The interface compiles, links, and runs an Idem program:
 
 ```
+./idem --version
+./idem --help
 ./idem examples/hello.idem
 ./idem examples/hello.idem arg1 arg2
 ./idem --tokens examples/hello.idem
@@ -62,7 +69,9 @@ The interface compiles, links, and runs an Idem program:
 
 Set `IDEM_KEEP_C=1` to keep the generated C file and its temporary
 executable for inspection. The driver uses `$CC` when set, otherwise
-`cc`.
+`cc`. It finds the runtime sources in `$IDEM_RUNTIME_DIR` when set, then
+in `../lib/idem/runtime` or `runtime` relative to the executable, and
+finally in the build-tree location.
 
 ## Benchmarks
 
