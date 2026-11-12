@@ -245,6 +245,9 @@ Value idem_to_int(Value value)
     long parsed;
     int ok;
 
+    if (value.tag == IDEM_TAG_CHAR) {
+        return idem_int((IdemInt)value.as.c);
+    }
     if (value.tag == IDEM_TAG_FLOAT) {
         double f;
         f = value.as.f;
@@ -255,7 +258,7 @@ Value idem_to_int(Value value)
         return idem_int((IdemInt)f);
     }
     if (value.tag != IDEM_TAG_STRING) {
-        idem_panic_str("toInt expects a String or Float");
+        idem_panic_str("toInt expects a String, Float, or Char");
     }
     obj = (IdemStringObj *)value.as.obj;
     text = (char *)malloc(obj->length + 1);

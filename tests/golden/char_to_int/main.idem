@@ -1,0 +1,6 @@
+fn main(args: Array[String]) -> Unit = {
+    println(toInt('A'))
+    println(toInt('é'))
+    println(toInt('😀'))
+    println(toInt('\n'))
+}

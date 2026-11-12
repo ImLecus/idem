@@ -197,6 +197,17 @@ static void test_struct_shorthand_binding(void)
     remove("build/_check_shorthand.idem");
 }
 
+static void test_to_int_char(void)
+{
+    CHECK(write_file("build/_check_to_int_char.idem",
+        "fn main(args: Array[String]) -> Unit = {\n"
+        "  let code: Int = toInt('A')\n"
+        "  println(code)\n"
+        "}\n"));
+    expect_ok("build/_check_to_int_char.idem");
+    remove("build/_check_to_int_char.idem");
+}
+
 static void test_errors(void)
 {
     CHECK(write_file("build/_check_arith.idem",
@@ -349,6 +360,7 @@ int check_test_run(void)
 {
     test_valid_program();
     test_struct_shorthand_binding();
+    test_to_int_char();
     test_errors();
 
     if (failures != 0) {
