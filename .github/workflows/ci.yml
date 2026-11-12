@@ -9,16 +9,20 @@ permissions:
 
 jobs:
   test:
-    name: C89 / ${{ matrix.compiler }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: C89 / ${{ matrix.os }} / ${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
       matrix:
-        compiler:
-          - gcc
-          - clang
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+          - os: ubuntu-latest
+            compiler: clang
+          - os: macos-15
+            compiler: clang
 
     env:
       CFLAGS: -std=c89 -pedantic -Wall -Wextra -Werror -Wdeclaration-after-statement -O2 -g
