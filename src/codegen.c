@@ -722,6 +722,9 @@ static void cg_builtin_call(Codegen *cg, CgBuf *buf, IrExpr *expr)
     } else if (cg_name_eq(name, len, "concat")) {
         cg_printf(buf, "idem_concat(slots[%d], slots[%d])",
                   args[0], args[1]);
+    } else if (cg_name_eq(name, len, "join")) {
+        cg_printf(buf, "idem_join(slots[%d], slots[%d])",
+                  args[0], args[1]);
     } else if (cg_name_eq(name, len, "map")) {
         cg_printf(buf, "idem_map(slots[%d], slots[%d], ",
                   args[0], args[1]);

@@ -125,7 +125,7 @@ The following names denote built-in functions and are reserved as value names:
 
 ```
 print println readLine readFile writeFile flush exit panic
-len get set remove push concat map filter fold sum keys values
+len get set remove push concat join map filter fold sum keys values
 abs min max sqrt floor ceil pow random now
 byteAt slice compare charAt chars toInt toFloat toString toBytes fromBytes
 ```
@@ -1010,6 +1010,8 @@ UTF-8.
 | `slice` | `(Bytes, Int, Int) -> Bytes` | P | Byte subsequence over `[start, end)`. Panics unless `0 <= start <= end <= len`. |
 | `concat` | `(String, String) -> String` | P | Concatenates the second string after the first. |
 | `concat` | `(Bytes, Bytes) -> Bytes` | P | Concatenates the second byte sequence after the first. |
+| `join` | `(Array[String], String) -> String` | P | Concatenates the string elements, inserting the separator between adjacent elements. An empty array returns `""`. |
+| `join` | `(List[String], String) -> String` | P | Concatenates the string elements, inserting the separator between adjacent elements. An empty list returns `""`. |
 | `compare` | `(String, String) -> Int` | P | Lexicographic byte comparison. Returns a negative value, zero, or a positive value when the first argument is less than, equal to, or greater than the second. The magnitude is unspecified. |
 | `compare` | `(Bytes, Bytes) -> Int` | P | Lexicographic byte comparison with the same result convention. |
 | `charAt` | `(String, Int) -> Char \| Unit` | P | The zero-based `i`-th Unicode scalar. Returns `Unit` if `i < 0` or `i >= number of scalars`. O(n) in the byte length. |
@@ -1491,6 +1493,8 @@ slice       (String, Int, Int) -> String
 slice       (Bytes, Int, Int) -> Bytes
 concat      (String, String) -> String
 concat      (Bytes, Bytes) -> Bytes
+join        (Array[String], String) -> String
+join        (List[String], String) -> String
 compare     (String, String) -> Int
 compare     (Bytes, Bytes) -> Int
 charAt      (String, Int) -> Char | Unit
