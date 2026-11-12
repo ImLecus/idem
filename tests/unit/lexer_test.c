@@ -202,15 +202,10 @@ static void test_comments_and_newlines(void)
     Lexer lx;
     Token t;
 
-    src = "a -- line\nb {- block {- nested -} still -} c\r\nd";
+    src = "# leading\r\na # trailing\nb\r\nc # eof";
     arena_init(&arena);
     lexer_init(&lx, "<comments>", (const unsigned char *)src,
                strlen(src), &arena);
-
-    t = lexer_next(&lx);
-    CHECK(t.kind == TOK_IDENT);
-    CHECK(t.span.line == 1);
-    CHECK(t.span.column == 1);
 
     t = lexer_next(&lx);
     CHECK(t.kind == TOK_NEWLINE);
@@ -219,10 +214,6 @@ static void test_comments_and_newlines(void)
     CHECK(t.kind == TOK_IDENT);
     CHECK(t.span.line == 2);
     CHECK(t.span.column == 1);
-
-    t = lexer_next(&lx);
-    CHECK(t.kind == TOK_IDENT);
-    CHECK(t.span.line == 2);
 
     t = lexer_next(&lx);
     CHECK(t.kind == TOK_NEWLINE);
@@ -232,6 +223,103 @@ static void test_comments_and_newlines(void)
     CHECK(t.span.line == 3);
     CHECK(t.span.column == 1);
 
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_NEWLINE);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_IDENT);
+    CHECK(t.span.line == 4);
+    CHECK(t.span.column == 1);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_EOF);
+
+    arena_free(&arena);
+
+    /* A comment does not have to start at the beginning of a line. */
+    src = "a#comment\nb";
+    arena_init(&arena);
+    lexer_init(&lx, "<inline-comment>", (const unsigned char *)src,
+               strlen(src), &arena);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_IDENT);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_NEWLINE);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_IDENT);
+    CHECK(t.span.line == 2);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_EOF);
+
+    arena_free(&arena);
+
+    /* A comment at EOF still produces EOF, with no newline required. */
+    src = "# only a comment";
+    arena_init(&arena);
+    lexer_init(&lx, "<comment-eof>", (const unsigned char *)src,
+               strlen(src), &arena);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_EOF);
+
+    arena_free(&arena);
+
+    /* '#' inside strings and characters is not a comment. */
+    src = "\"# not a comment\" '#' r\"# raw\" # real comment";
+    arena_init(&arena);
+    lexer_init(&lx, "<comment-in-string>",
+               (const unsigned char *)src, strlen(src), &arena);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_STRING);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_CHAR);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_STRING);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_EOF);
+
+    arena_free(&arena);
+}
+
+static void test_no_block_comments(void)
+{
+    const char *src;
+    Arena arena;
+    Lexer lx;
+    Token t;
+
+    /* '{-' is not a comment: it is an open brace followed by minus. */
+    src = "{- -}";
+    arena_init(&arena);
+    lexer_init(&lx, "<no-block-comments>",
+               (const unsigned char *)src, strlen(src), &arena);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_LBRACE);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_MINUS);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_MINUS);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_RBRACE);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_EOF);
+
+    arena_free(&arena);
+
+    src = "#\n{-";
+    arena_init(&arena);
+    lexer_init(&lx, "<no-block-comment-error>",
+               (const unsigned char *)src, strlen(src), &arena);
+
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_NEWLINE);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_LBRACE);
+    t = lexer_next(&lx);
+    CHECK(t.kind == TOK_MINUS);
     t = lexer_next(&lx);
     CHECK(t.kind == TOK_EOF);
 
@@ -335,7 +423,7 @@ static void test_utf8_and_positions(void)
     CHECK(memcmp(t.as.str_lit.data, "\xE2\x98\x83", 3) == 0);
     arena_free(&arena);
 
-    src = "-- \xE2\x98\x83\nfoo";
+    src = "# \xE2\x98\x83\nfoo";
     arena_init(&arena);
     lexer_init(&lx, "<utf8-comment>", (const unsigned char *)src,
                strlen(src), &arena);
@@ -415,8 +503,6 @@ static void test_errors(void)
     expect_error("''");
     expect_error("'ab'");
     expect_error("b\"\\u{41}\"");
-    expect_error("{-");
-    expect_error("{- {- -}");
     expect_error("1e999");
     expect_error("0xFFFFFFFFFFFFFFFF");
 
@@ -435,6 +521,7 @@ int lexer_test_run(void)
     test_numbers();
     test_int_boundaries();
     test_comments_and_newlines();
+    test_no_block_comments();
     test_strings_and_chars();
     test_more_strings();
     test_utf8_and_positions();

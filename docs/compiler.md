@@ -184,8 +184,9 @@ Token kinds include:
 
 Spaces and tabs are skipped. Newlines produce a `newline` token. Consecutive newlines can be collapsed into one. Comments are skipped:
 
-- `--` skips to the end of the line;
-- `{- ... -}` skips a nested block comment.
+- `#` skips to the end of the line.
+
+There are no block comments.
 
 ### 5.4. Identifiers and keywords
 
@@ -216,7 +217,7 @@ The parser treats `newline` as a separator inside blocks. The lexer can suppress
 The lexer reports:
 
 - invalid UTF-8;
-- unterminated strings, chars, and block comments;
+- unterminated strings and chars;
 - invalid escapes;
 - invalid numeric literals;
 - integer overflow.

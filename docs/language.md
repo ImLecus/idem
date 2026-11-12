@@ -93,10 +93,9 @@ Space, tab, carriage return, and line feed are whitespace. Newlines separate exp
 
 ### 3.3. Comments
 
-- A line comment begins with `--` and extends to the end of the line.
-- A block comment begins with `{-` and ends with `-}`. Block comments nest.
+A line comment begins with `#` and extends to the end of the line.
 
-Comments are whitespace.
+Comments are whitespace. There are no block comments in version 0.1.
 
 ### 3.4. Identifiers
 
