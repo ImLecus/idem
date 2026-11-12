@@ -1,3 +1,9 @@
+#if defined(__APPLE__)
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE 1
+#endif
+#endif
+
 #if defined(__unix__) || defined(__APPLE__)
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 700
@@ -7,6 +13,7 @@
 #endif
 #endif
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,6 +172,18 @@ static char *copy_string(const char *text)
     memcpy(copy, text, len + 1);
     return copy;
 }
+
+#if defined(__unix__) || defined(__APPLE__)
+static char *canonical_path(const char *path)
+{
+    char resolved[PATH_MAX];
+
+    if (realpath(path, resolved) == NULL) {
+        return NULL;
+    }
+    return copy_string(resolved);
+}
+#endif
 
 static char *join_path(const char *dir, const char *name)
 {
@@ -341,7 +360,7 @@ static char *find_executable(const char *argv0)
         }
         if ((size_t)count < capacity - 1) {
             buffer[count] = '\0';
-            resolved = realpath(buffer, NULL);
+            resolved = canonical_path(buffer);
             free(buffer);
             if (resolved != NULL) {
                 return resolved;
@@ -357,7 +376,7 @@ static char *find_executable(const char *argv0)
 #endif
 
     if (strchr(argv0, '/') != NULL) {
-        return realpath(argv0, NULL);
+        return canonical_path(argv0);
     }
 
     path_env = getenv("PATH");
@@ -381,7 +400,7 @@ static char *find_executable(const char *argv0)
         }
         if (candidate != NULL) {
             if (access(candidate, X_OK) == 0) {
-                resolved = realpath(candidate, NULL);
+                resolved = canonical_path(candidate);
                 free(candidate);
                 if (resolved != NULL) {
                     return resolved;
