@@ -13,7 +13,7 @@ fn main(args: Array[String]) -> Unit = {
 
 ## Status
 
-The language design is closed for version 0.1. The C89 **lexer, parser, resolver, type checker, IR lowering, C89 code generator, and runtime are implemented** and covered by unit and golden tests. The `idem` binary compiles a source file with the system C compiler and runs the resulting executable; `--tokens` dumps the token stream and `--emit-c` prints the generated C89.
+The language design is closed for `Idem2026`, and `idem 1.0.0` is the first stable compiler implementing it. The C89 **lexer, parser, resolver, type checker, IR lowering, C89 code generator, and runtime are implemented** and covered by unit and golden tests. The `idem` binary compiles a source file with the system C compiler and runs the resulting executable; `--tokens` dumps the token stream and `--emit-c` prints the generated C89.
 
 The normative specification is in [docs/language.md](docs/language.md), and the compiler implementation guide is in [docs/compiler.md](docs/compiler.md).
 

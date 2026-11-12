@@ -1,7 +1,7 @@
 # The Idem Reference Compiler
 
-**Version:** 0.1.0-draft  
-**Date:** 2026-11-11
+**Version:** 1.0.0
+**Date:** 2026-11-12
 
 ---
 
@@ -160,7 +160,7 @@ The driver also supports two inspection modes:
 - `idem --tokens file.idem` prints the token stream;
 - `idem --emit-c file.idem` prints the generated C89.
 
-The driver does not need a build system, a manifest, or a package manager in version 0.1.
+The driver does not need a build system, a manifest, or a package manager in `idem 1.0.0`.
 
 ---
 
@@ -354,7 +354,7 @@ The resolver checks:
 
 ### 7.7. Name collisions
 
-Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. Version 0.1 has no qualified names or import aliases.
+Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. `Idem2026` has no qualified names or import aliases.
 
 ---
 
@@ -731,9 +731,11 @@ The runtime provides:
   `idem_compare`, `idem_byte_at`, `idem_char_at`, `idem_chars`,
   `idem_to_bytes`, `idem_from_bytes`;
 - `idem_array`, `idem_list`, `idem_map_lit`, `idem_get`, `idem_set`,
-  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`;
+  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`, `idem_has`,
+  `idem_range`, `idem_for_each`, `idem_sort`, `idem_contains`;
 - `idem_map`, `idem_filter`, `idem_fold`, `idem_sum_int`,
-  `idem_sum_float`, `idem_keys`, `idem_values`;
+  `idem_sum_float`, `idem_keys`, `idem_values`, `idem_split`, `idem_trim`,
+  `idem_starts_with`, `idem_ends_with`, `idem_replace`;
 - `idem_print`, `idem_to_string`, `idem_panic`.
 
 All collection operations preserve immutability in the observable API. The reference runtime copies on update. The GC handles reclamation.
@@ -906,7 +908,7 @@ The compiler benchmark runs the pipeline in-process. The runtime benchmark exclu
 
 ## 13. Implementation Plan
 
-A practical order for building version 0.1:
+A practical order for building the reference compiler:
 
 1. **Skeleton:** arena, diagnostics, token definitions, driver.
 2. **Lexer:** all tokens, UTF-8, comments, literals.
@@ -922,7 +924,7 @@ A practical order for building version 0.1:
 12. **Tests and examples:** golden tests, unit tests, acceptance programs.
 13. **Polish:** diagnostics, float formatting, documentation.
 
-Version 0.1 deliberately omits:
+The first executable milestone deliberately omitted:
 
 - modules in the first executable milestone (they can be added after the core works);
 - `List` and `Map` in the first milestone (arrays, strings, and structs/enums are enough to validate the model);

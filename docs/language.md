@@ -1,7 +1,7 @@
 # The Idem Language Specification
 
-**Version:** 0.1.0-draft  
-**Date:** 2026-11-11
+**Version:** Idem2026
+**Date:** 2026-11-12
 
 ---
 
@@ -13,7 +13,7 @@ User data is immutable. Input/output, non-determinism, and internal mutation are
 
 Idem has no user-defined generics. The type `Any` is an opaque top type used to transport heterogeneous values to built-ins. The prelude provides a closed set of generic collections: `Array[T]`, `List[T]`, and `Map[K, V]`. For "one of several types", use a union (`Int | String`) or a monomorphic `enum`.
 
-The reference implementation is a compiler written in strict C89 that emits portable C89. The language specification is independent of the implementation, but the reference compiler is the normative implementation for version 0.1.
+The reference implementation is a compiler written in strict C89 that emits portable C89. The language specification is independent of the implementation, but the reference compiler is the normative implementation for `Idem2026`.
 
 ### 1.1. Design principles
 
@@ -95,7 +95,7 @@ Space, tab, carriage return, and line feed are whitespace. Newlines separate exp
 
 A line comment begins with `#` and extends to the end of the line.
 
-Comments are whitespace. There are no block comments in version 0.1.
+Comments are whitespace. Idem has no block comments.
 
 ### 3.4. Identifiers
 
@@ -105,7 +105,7 @@ An identifier begins with an ASCII letter or underscore and continues with ASCII
 ident ::= [A-Za-z_][A-Za-z0-9_]*
 ```
 
-Identifiers are case-sensitive. Non-ASCII identifiers are not supported in version 0.1.
+Identifiers are case-sensitive. Non-ASCII identifiers are not supported in `Idem2026`.
 
 ### 3.5. Keywords
 
@@ -125,14 +125,14 @@ The following names denote built-in functions and are reserved as value names:
 
 ```
 print println readLine readFile writeFile flush exit panic
-len get set remove push concat join map filter fold sum keys values
+len get set remove push concat join has range forEach sort contains map filter fold sum keys values
 abs min max sqrt floor ceil pow random now
-byteAt slice compare charAt chars toInt toFloat toString toBytes fromBytes
+byteAt slice compare split trim startsWith endsWith replace charAt chars toInt toFloat toString toBytes fromBytes
 ```
 
 The prelude also defines the enum `Error` with constructors `NotFound`, `PermissionDenied`, `InvalidUtf8`, and `Io`. The name `Error` and its constructors are reserved as well.
 
-No reserved word, reserved type name, or built-in name may be used as a user-defined identifier. The built-in function list is closed for version 0.1; no other prelude value names exist. Collection type names (`Array`, `List`, `Map`) are reserved and cannot be used as variable names or user-defined type names.
+No reserved word, reserved type name, or built-in name may be used as a user-defined identifier. The built-in function list is closed for `Idem2026`; no other prelude value names exist. Collection type names (`Array`, `List`, `Map`) are reserved and cannot be used as variable names or user-defined type names.
 
 Collection literals use the reserved type names: `List[e1, e2, ...]` is a list literal and `Map{ key: value, ... }` is a map literal. In expression position, `List[...]` and `Map{...}` are literals; in type position, `List[T]` and `Map[K, V]` are type applications. The lower-case `map(...)` is the built-in function. A local binding may not shadow a reserved built-in or prelude name.
 
@@ -513,6 +513,7 @@ A type is **hashable** if it is one of:
 - `chars(s)` returns an `Array[Char]` of the code points.
 - `toInt(c)` returns the Unicode scalar value of a `Char` as an `Int`.
 - `compare(a, b)` compares two strings lexicographically by byte. UTF-8 preserves code-point order, so this is also lexicographic by code point.
+- `contains(s, part)`, `startsWith(s, prefix)`, and `endsWith(s, suffix)` provide substring tests; `split(s, separator)` returns an `Array[String]`; `trim(s)` removes ASCII whitespace; `replace(s, old, new)` replaces all non-overlapping occurrences.
 - `toBytes(s)` returns the UTF-8 bytes. `fromBytes(b)` returns `String | Error`, validating UTF-8.
 - String literals are valid UTF-8. `\u{...}` escapes encode the corresponding scalar.
 
@@ -698,7 +699,9 @@ let xs: Array[Int] = [1, 2, 3]
 - Arrays have fixed size.
 - Indexing `xs[i]` is sugar for `get(xs, i)` and has type `T | Unit`.
 - `set(xs, i, v)` returns a new array; it panics if `i` is out of bounds.
-- `concat`, `map`, `filter`, `fold`, and `sum` are built-ins.
+- `concat`, `map`, `filter`, `fold`, `forEach`, `sort`, and `sum` are built-ins.
+- `range(end)`, `range(start, end)`, and `range(start, end, step)` build `Array[Int]` values.
+- `contains(xs, value)` tests for an equal element; `T` must be comparable.
 
 **Lists**
 
@@ -711,7 +714,8 @@ let xs: List[Int] = List[1, 2, 3]
 - `List[]` requires an expected type.
 - Lists are persistent and immutable.
 - `push(xs, v)` returns a new list.
-- `get`, `concat`, `map`, `filter`, `fold`, and `sum` are built-ins.
+- `get`, `concat`, `map`, `filter`, `fold`, `forEach`, `sort`, and `sum` are built-ins.
+- `contains(xs, value)` tests for an equal element; `T` must be comparable.
 
 **Maps**
 
@@ -727,6 +731,7 @@ let m: Map[String, Int] = Map{ "one": 1, "two": 2 }
 - `set(m, k, v)` returns a new map; `remove(m, k)` returns a new map.
 - `keys(m)` and `values(m)` return arrays in insertion order.
 - `get(m, k)` returns `V | Unit`.
+- `has(m, k)` returns `Bool` and distinguishes an absent key from a stored `Unit` value.
 
 ### 6.10. `Any`
 
@@ -827,7 +832,7 @@ Union injection and `Any` widening are represented at runtime with tags. There a
 - `Variant(p₁, ..., pₙ)` matches an enum variant with payload.
 - `x: T` matches a value of a union member `T` and binds it to `x` with type `T`. It is valid only when the scrutinee type is a union containing `T`, and never on `Any`.
 
-There are no or-patterns, range patterns, or guards in version 0.1.
+There are no or-patterns, range patterns, or guards in `Idem2026`.
 
 ### 7.2. Irrefutable patterns
 
@@ -889,7 +894,7 @@ import "geometry/shapes.idem"
 - All top-level declarations are public.
 - Declaration order within a module does not matter; the resolver collects all top-level names before type checking.
 - The root module must define exactly one `main`. Imported modules must not define `main`.
-- Package management, versioning, and manifests are outside version 0.1.
+- Package management, versioning, and manifests are outside `Idem2026`.
 
 ### 8.2. Top-level declarations
 
@@ -939,7 +944,7 @@ The runtime calls `main` with an `Array[String]` containing the program argument
 
 ### 8.7. Imports and name collisions
 
-Because all declarations are public and imports are unqualified, two imported modules that export the same top-level name cause a compile-time error at the import site. Version 0.1 does not provide qualified names or import aliases. Programs should use distinct names across modules.
+Because all declarations are public and imports are unqualified, two imported modules that export the same top-level name cause a compile-time error at the import site. `Idem2026` does not provide qualified names or import aliases. Programs should use distinct names across modules.
 
 ---
 
@@ -966,7 +971,7 @@ Built-ins fall into four categories:
 
 ### 9.2. Catalog
 
-The catalog is closed for version 0.1: these are the only built-in
+The catalog is closed for `Idem2026`: these are the only built-in
 functions. No implementation may add additional built-in names without a
 language-specification change.
 
@@ -978,106 +983,127 @@ language-specification change.
 - The effect column uses **P** (pure), **E** (effectful), **I**
   (input-dependent), and **N** (non-deterministic).
 - Arguments are strict and evaluated left-to-right before the call.
-- Built-ins are not first-class values in version 0.1. A built-in name may
+- Built-ins are not first-class values in `Idem2026`. A built-in name may
   appear only in call position; it cannot be stored in a variable or passed
   as a function argument.
 
 #### I/O and process
 
-| Built-in | Signature | Effect | Semantics |
-| --- | --- | --- | --- |
-| `print` | `(Any) -> Unit` | E | Writes the canonical rendering of its argument to stdout, without a newline. Does not flush. |
-| `println` | `(Any) -> Unit` | E | Same as `print`, followed by `\n`. Does not flush. |
-| `readLine` | `() -> String \| Unit` | I | Reads one line from stdin, strips the trailing `\n` and an optional preceding `\r`, and returns the line. Returns `Unit` when EOF is reached with no bytes read. Stdin is assumed to be UTF-8. |
-| `readFile` | `(String) -> String \| Error` | I | Reads the named file as bytes and validates UTF-8. Returns `NotFound`, `PermissionDenied`, `InvalidUtf8`, or `Io(message)` on failure. |
-| `writeFile` | `(String, String) -> Unit \| Error` | E | Creates or truncates the named file and writes the UTF-8 contents. Returns `Unit` on success or `NotFound`, `PermissionDenied`, or `Io(message)` on failure. |
-| `flush` | `() -> Unit` | E | Flushes stdout. |
-| `exit` | `(Int) -> Never` | E | Flushes stdout and terminates the process with status `code & 0xFF`. Never returns. |
-| `panic` | `(String) -> Never` | E | Flushes stdout, writes `panic: <message>\n` to stderr, and terminates the process with status 101. Never returns. |
+| Built-in    | Signature                           | Effect | Semantics                                                                                                                                                                                      |
+| ----------- | ----------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `print`     | `(Any) -> Unit`                     | E      | Writes the canonical rendering of its argument to stdout, without a newline. Does not flush.                                                                                                   |
+| `println`   | `(Any) -> Unit`                     | E      | Same as `print`, followed by `\n`. Does not flush.                                                                                                                                             |
+| `readLine`  | `() -> String \| Unit`              | I      | Reads one line from stdin, strips the trailing `\n` and an optional preceding `\r`, and returns the line. Returns `Unit` when EOF is reached with no bytes read. Stdin is assumed to be UTF-8. |
+| `readFile`  | `(String) -> String \| Error`       | I      | Reads the named file as bytes and validates UTF-8. Returns `NotFound`, `PermissionDenied`, `InvalidUtf8`, or `Io(message)` on failure.                                                         |
+| `writeFile` | `(String, String) -> Unit \| Error` | E      | Creates or truncates the named file and writes the UTF-8 contents. Returns `Unit` on success or `NotFound`, `PermissionDenied`, or `Io(message)` on failure.                                   |
+| `flush`     | `() -> Unit`                        | E      | Flushes stdout.                                                                                                                                                                                |
+| `exit`      | `(Int) -> Never`                    | E      | Flushes stdout and terminates the process with status `code & 0xFF`. Never returns.                                                                                                            |
+| `panic`     | `(String) -> Never`                 | E      | Flushes stdout, writes `panic: <message>\n` to stderr, and terminates the process with status 101. Never returns.                                                                              |
 
 #### Strings and bytes
 
 String length and indices are measured in bytes. Character operations decode
 UTF-8.
 
-| Built-in | Signature | Effect | Semantics |
-| --- | --- | --- | --- |
-| `len` | `(String) -> Int` | P | UTF-8 byte length. |
-| `len` | `(Bytes) -> Int` | P | Byte length. |
-| `byteAt` | `(String, Int) -> Int \| Unit` | P | Byte at zero-based index `i`. Returns `Unit` if `i < 0` or `i >= len`. |
-| `byteAt` | `(Bytes, Int) -> Int \| Unit` | P | Byte at zero-based index `i`. Returns `Unit` if `i < 0` or `i >= len`. |
-| `slice` | `(String, Int, Int) -> String` | P | Substring over the half-open byte range `[start, end)`. Panics unless `0 <= start <= end <= len` and both bounds are UTF-8 boundaries. |
-| `slice` | `(Bytes, Int, Int) -> Bytes` | P | Byte subsequence over `[start, end)`. Panics unless `0 <= start <= end <= len`. |
-| `concat` | `(String, String) -> String` | P | Concatenates the second string after the first. |
-| `concat` | `(Bytes, Bytes) -> Bytes` | P | Concatenates the second byte sequence after the first. |
-| `join` | `(Array[String], String) -> String` | P | Concatenates the string elements, inserting the separator between adjacent elements. An empty array returns `""`. |
-| `join` | `(List[String], String) -> String` | P | Concatenates the string elements, inserting the separator between adjacent elements. An empty list returns `""`. |
-| `compare` | `(String, String) -> Int` | P | Lexicographic byte comparison. Returns a negative value, zero, or a positive value when the first argument is less than, equal to, or greater than the second. The magnitude is unspecified. |
-| `compare` | `(Bytes, Bytes) -> Int` | P | Lexicographic byte comparison with the same result convention. |
-| `charAt` | `(String, Int) -> Char \| Unit` | P | The zero-based `i`-th Unicode scalar. Returns `Unit` if `i < 0` or `i >= number of scalars`. O(n) in the byte length. |
-| `chars` | `(String) -> Array[Char]` | P | The Unicode scalars of the string, in order. |
-| `toInt` | `(String) -> Int \| Unit` | P | Parses an optional `+` or `-` sign followed by one or more decimal digits, with no surrounding whitespace. Returns `Unit` on invalid input or overflow. |
-| `toInt` | `(Float) -> Int \| Unit` | P | Truncates toward zero. Returns `Unit` if the value is `NaN`, infinite, or outside the `Int` range. |
-| `toInt` | `(Char) -> Int` | P | The Unicode scalar value of the character. |
-| `toFloat` | `(String) -> Float \| Unit` | P | Parses decimal floating-point notation: an optional sign, decimal digits, an optional fractional part, and an optional decimal exponent. No surrounding whitespace. Returns `Unit` on invalid input, overflow, or underflow. |
-| `toFloat` | `(Int) -> Float` | P | Converts exactly with round-to-nearest, ties-to-even. |
-| `toString` | `(Any) -> String` | P | Canonical textual rendering from §9.4. |
-| `toBytes` | `(String) -> Bytes` | P | The UTF-8 bytes of the string. |
-| `fromBytes` | `(Bytes) -> String \| Error` | P | Validates UTF-8. Returns the string on success or `InvalidUtf8` on failure. |
+| Built-in     | Signature                            | Effect | Semantics                                                                                                                                                                                                                    |
+| ------------ | ------------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `len`        | `(String) -> Int`                    | P      | UTF-8 byte length.                                                                                                                                                                                                           |
+| `len`        | `(Bytes) -> Int`                     | P      | Byte length.                                                                                                                                                                                                                 |
+| `byteAt`     | `(String, Int) -> Int \| Unit`       | P      | Byte at zero-based index `i`. Returns `Unit` if `i < 0` or `i >= len`.                                                                                                                                                       |
+| `byteAt`     | `(Bytes, Int) -> Int \| Unit`        | P      | Byte at zero-based index `i`. Returns `Unit` if `i < 0` or `i >= len`.                                                                                                                                                       |
+| `slice`      | `(String, Int, Int) -> String`       | P      | Substring over the half-open byte range `[start, end)`. Panics unless `0 <= start <= end <= len` and both bounds are UTF-8 boundaries.                                                                                       |
+| `slice`      | `(Bytes, Int, Int) -> Bytes`         | P      | Byte subsequence over `[start, end)`. Panics unless `0 <= start <= end <= len`.                                                                                                                                              |
+| `concat`     | `(String, String) -> String`         | P      | Concatenates the second string after the first.                                                                                                                                                                              |
+| `concat`     | `(Bytes, Bytes) -> Bytes`            | P      | Concatenates the second byte sequence after the first.                                                                                                                                                                       |
+| `join`       | `(Array[String], String) -> String`  | P      | Concatenates the string elements, inserting the separator between adjacent elements. An empty array returns `""`.                                                                                                            |
+| `join`       | `(List[String], String) -> String`   | P      | Concatenates the string elements, inserting the separator between adjacent elements. An empty list returns `""`.                                                                                                             |
+| `compare`    | `(String, String) -> Int`            | P      | Lexicographic byte comparison. Returns a negative value, zero, or a positive value when the first argument is less than, equal to, or greater than the second. The magnitude is unspecified.                                 |
+| `compare`    | `(Bytes, Bytes) -> Int`              | P      | Lexicographic byte comparison with the same result convention.                                                                                                                                                               |
+| `contains`   | `(String, String) -> Bool`           | P      | `true` when the first string contains the second as a byte substring. An empty needle is always contained.                                                                                                                   |
+| `contains`   | `(Bytes, Bytes) -> Bool`             | P      | `true` when the first byte sequence contains the second. An empty needle is always contained.                                                                                                                                |
+| `split`      | `(String, String) -> Array[String]`  | P      | Splits around non-overlapping occurrences of the separator. Consecutive separators produce empty strings. An empty separator panics.                                                                                         |
+| `trim`       | `(String) -> String`                 | P      | Removes leading and trailing ASCII whitespace (`space`, `\t`, `\n`, `\r`, `\v`, `\f`).                                                                                                                                       |
+| `startsWith` | `(String, String) -> Bool`           | P      | `true` when the first string starts with the second.                                                                                                                                                                         |
+| `startsWith` | `(Bytes, Bytes) -> Bool`             | P      | `true` when the first byte sequence starts with the second.                                                                                                                                                                  |
+| `endsWith`   | `(String, String) -> Bool`           | P      | `true` when the first string ends with the second.                                                                                                                                                                           |
+| `endsWith`   | `(Bytes, Bytes) -> Bool`             | P      | `true` when the first byte sequence ends with the second.                                                                                                                                                                    |
+| `replace`    | `(String, String, String) -> String` | P      | Replaces all non-overlapping occurrences of the second string with the third. An empty pattern panics.                                                                                                                       |
+| `charAt`     | `(String, Int) -> Char \| Unit`      | P      | The zero-based `i`-th Unicode scalar. Returns `Unit` if `i < 0` or `i >= number of scalars`. O(n) in the byte length.                                                                                                        |
+| `chars`      | `(String) -> Array[Char]`            | P      | The Unicode scalars of the string, in order.                                                                                                                                                                                 |
+| `toInt`      | `(String) -> Int \| Unit`            | P      | Parses an optional `+` or `-` sign followed by one or more decimal digits, with no surrounding whitespace. Returns `Unit` on invalid input or overflow.                                                                      |
+| `toInt`      | `(Float) -> Int \| Unit`             | P      | Truncates toward zero. Returns `Unit` if the value is `NaN`, infinite, or outside the `Int` range.                                                                                                                           |
+| `toInt`      | `(Char) -> Int`                      | P      | The Unicode scalar value of the character.                                                                                                                                                                                   |
+| `toFloat`    | `(String) -> Float \| Unit`          | P      | Parses decimal floating-point notation: an optional sign, decimal digits, an optional fractional part, and an optional decimal exponent. No surrounding whitespace. Returns `Unit` on invalid input, overflow, or underflow. |
+| `toFloat`    | `(Int) -> Float`                     | P      | Converts exactly with round-to-nearest, ties-to-even.                                                                                                                                                                        |
+| `toString`   | `(Any) -> String`                    | P      | Canonical textual rendering from §9.4.                                                                                                                                                                                       |
+| `toBytes`    | `(String) -> Bytes`                  | P      | The UTF-8 bytes of the string.                                                                                                                                                                                               |
+| `fromBytes`  | `(Bytes) -> String \| Error`         | P      | Validates UTF-8. Returns the string on success or `InvalidUtf8` on failure.                                                                                                                                                  |
 
 #### Collections
 
 All collection operations return new immutable values; they never mutate
 their arguments.
 
-| Built-in | Signature | Effect | Semantics |
-| --- | --- | --- | --- |
-| `len` | `(Array[T]) -> Int` | P | Number of elements. |
-| `len` | `(List[T]) -> Int` | P | Number of elements. |
-| `len` | `(Map[K, V]) -> Int` | P | Number of entries. |
-| `get` | `(Array[T], Int) -> T \| Unit` | P | Element at zero-based index `i`, or `Unit` if `i < 0` or out of bounds. |
-| `get` | `(List[T], Int) -> T \| Unit` | P | Element at zero-based index `i`, or `Unit` if `i < 0` or out of bounds. |
-| `get` | `(Map[K, V], K) -> V \| Unit` | P | Value for the key, or `Unit` if the key is absent. |
-| `set` | `(Array[T], Int, T) -> Array[T]` | P | New array with index `i` replaced. Panics if `i < 0` or `i` is out of bounds. |
-| `set` | `(Map[K, V], K, V) -> Map[K, V]` | P | New map with the key set to the value. Replacing an existing key preserves its position; a new key is appended. |
-| `remove` | `(Map[K, V], K) -> Map[K, V]` | P | New map without the key. If the key is absent, the result is equal to the input and insertion order is preserved. |
-| `push` | `(List[T], T) -> List[T]` | P | New list with the element appended at the end. |
-| `concat` | `(Array[T], Array[T]) -> Array[T]` | P | New array with the second array's elements after the first's. |
-| `concat` | `(List[T], List[T]) -> List[T]` | P | New list with the second list's elements after the first's. |
-| `map` | `(Array[T], T -> U) -> Array[U]` | P | Applies the function to each element left-to-right and preserves order. |
-| `map` | `(List[T], T -> U) -> List[U]` | P | Applies the function to each element left-to-right and preserves order. |
-| `filter` | `(Array[T], T -> Bool) -> Array[T]` | P | Keeps elements whose predicate result is `true`, preserving order. |
-| `filter` | `(List[T], T -> Bool) -> List[T]` | P | Keeps elements whose predicate result is `true`, preserving order. |
-| `fold` | `(Array[T], U, (U, T) -> U) -> U` | P | Left fold: starts with the initial accumulator and visits elements left-to-right. |
-| `fold` | `(List[T], U, (U, T) -> U) -> U` | P | Left fold: starts with the initial accumulator and visits elements left-to-right. |
-| `sum` | `(Array[Int]) -> Int` | P | Sum of elements. Empty input returns `0`; integer overflow panics. |
-| `sum` | `(Array[Float]) -> Float` | P | Sum of elements. Empty input returns `0.0`; follows IEEE-754 arithmetic. |
-| `sum` | `(List[Int]) -> Int` | P | Sum of elements. Empty input returns `0`; integer overflow panics. |
-| `sum` | `(List[Float]) -> Float` | P | Sum of elements. Empty input returns `0.0`; follows IEEE-754 arithmetic. |
-| `keys` | `(Map[K, V]) -> Array[K]` | P | Keys in insertion order. |
-| `values` | `(Map[K, V]) -> Array[V]` | P | Values in insertion order, aligned with `keys`. |
+| Built-in   | Signature                               | Effect | Semantics                                                                                                                                                           |
+| ---------- | --------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `len`      | `(Array[T]) -> Int`                     | P      | Number of elements.                                                                                                                                                 |
+| `len`      | `(List[T]) -> Int`                      | P      | Number of elements.                                                                                                                                                 |
+| `len`      | `(Map[K, V]) -> Int`                    | P      | Number of entries.                                                                                                                                                  |
+| `get`      | `(Array[T], Int) -> T \| Unit`          | P      | Element at zero-based index `i`, or `Unit` if `i < 0` or out of bounds.                                                                                             |
+| `get`      | `(List[T], Int) -> T \| Unit`           | P      | Element at zero-based index `i`, or `Unit` if `i < 0` or out of bounds.                                                                                             |
+| `get`      | `(Map[K, V], K) -> V \| Unit`           | P      | Value for the key, or `Unit` if the key is absent.                                                                                                                  |
+| `set`      | `(Array[T], Int, T) -> Array[T]`        | P      | New array with index `i` replaced. Panics if `i < 0` or `i` is out of bounds.                                                                                       |
+| `set`      | `(Map[K, V], K, V) -> Map[K, V]`        | P      | New map with the key set to the value. Replacing an existing key preserves its position; a new key is appended.                                                     |
+| `remove`   | `(Map[K, V], K) -> Map[K, V]`           | P      | New map without the key. If the key is absent, the result is equal to the input and insertion order is preserved.                                                   |
+| `push`     | `(List[T], T) -> List[T]`               | P      | New list with the element appended at the end.                                                                                                                      |
+| `concat`   | `(Array[T], Array[T]) -> Array[T]`      | P      | New array with the second array's elements after the first's.                                                                                                       |
+| `concat`   | `(List[T], List[T]) -> List[T]`         | P      | New list with the second list's elements after the first's.                                                                                                         |
+| `has`      | `(Map[K, V], K) -> Bool`                | P      | `true` when the map contains the key. Unlike `get`, it distinguishes an absent key from a value of type `Unit`.                                                     |
+| `range`    | `(Int) -> Array[Int]`                   | P      | Half-open range `[0, end)` with step 1.                                                                                                                             |
+| `range`    | `(Int, Int) -> Array[Int]`              | P      | Half-open range `[start, end)` with step 1. Returns an empty array when the direction is empty.                                                                     |
+| `range`    | `(Int, Int, Int) -> Array[Int]`         | P      | Half-open range with the given step. A zero step panics; a negative step descends.                                                                                  |
+| `forEach`  | `(Array[T], T -> Unit) -> Unit`         | P      | Calls the function for each element left-to-right and discards the results.                                                                                         |
+| `forEach`  | `(List[T], T -> Unit) -> Unit`          | P      | Calls the function for each element left-to-right and discards the results.                                                                                         |
+| `sort`     | `(Array[T]) -> Array[T]`                | P      | Stable sort using the language ordering. `T` must be orderable.                                                                                                     |
+| `sort`     | `(Array[T], (T, T) -> Int) -> Array[T]` | P      | Stable sort using the comparator. A negative result orders the first before the second, zero keeps order, and a positive result orders the second before the first. |
+| `sort`     | `(List[T]) -> List[T]`                  | P      | Stable sort using the language ordering. `T` must be orderable.                                                                                                     |
+| `sort`     | `(List[T], (T, T) -> Int) -> List[T]`   | P      | Stable comparator sort over a list.                                                                                                                                 |
+| `contains` | `(Array[T], T) -> Bool`                 | P      | `true` when the array contains an equal element. `T` must be comparable.                                                                                            |
+| `contains` | `(List[T], T) -> Bool`                  | P      | `true` when the list contains an equal element. `T` must be comparable.                                                                                             |
+| `map`      | `(Array[T], T -> U) -> Array[U]`        | P      | Applies the function to each element left-to-right and preserves order.                                                                                             |
+| `map`      | `(List[T], T -> U) -> List[U]`          | P      | Applies the function to each element left-to-right and preserves order.                                                                                             |
+| `filter`   | `(Array[T], T -> Bool) -> Array[T]`     | P      | Keeps elements whose predicate result is `true`, preserving order.                                                                                                  |
+| `filter`   | `(List[T], T -> Bool) -> List[T]`       | P      | Keeps elements whose predicate result is `true`, preserving order.                                                                                                  |
+| `fold`     | `(Array[T], U, (U, T) -> U) -> U`       | P      | Left fold: starts with the initial accumulator and visits elements left-to-right.                                                                                   |
+| `fold`     | `(List[T], U, (U, T) -> U) -> U`        | P      | Left fold: starts with the initial accumulator and visits elements left-to-right.                                                                                   |
+| `sum`      | `(Array[Int]) -> Int`                   | P      | Sum of elements. Empty input returns `0`; integer overflow panics.                                                                                                  |
+| `sum`      | `(Array[Float]) -> Float`               | P      | Sum of elements. Empty input returns `0.0`; follows IEEE-754 arithmetic.                                                                                            |
+| `sum`      | `(List[Int]) -> Int`                    | P      | Sum of elements. Empty input returns `0`; integer overflow panics.                                                                                                  |
+| `sum`      | `(List[Float]) -> Float`                | P      | Sum of elements. Empty input returns `0.0`; follows IEEE-754 arithmetic.                                                                                            |
+| `keys`     | `(Map[K, V]) -> Array[K]`               | P      | Keys in insertion order.                                                                                                                                            |
+| `values`   | `(Map[K, V]) -> Array[V]`               | P      | Values in insertion order, aligned with `keys`.                                                                                                                     |
 
 #### Mathematics
 
-| Built-in | Signature | Effect | Semantics |
-| --- | --- | --- | --- |
-| `abs` | `(Int) -> Int` | P | Absolute value. Panics for `Int` minimum. |
-| `abs` | `(Float) -> Float` | P | Absolute value with `fabs` semantics: `NaN` stays `NaN`, and `-0.0` becomes `0.0`. |
-| `min` | `(Int, Int) -> Int` | P | Smaller value. |
-| `min` | `(Float, Float) -> Float` | P | Smaller value. If one operand is `NaN`, returns the other; if both are `NaN`, returns `NaN`. |
-| `max` | `(Int, Int) -> Int` | P | Larger value. |
-| `max` | `(Float, Float) -> Float` | P | Larger value. If one operand is `NaN`, returns the other; if both are `NaN`, returns `NaN`. |
-| `sqrt` | `(Float) -> Float` | P | Square root. Negative inputs produce `NaN`. |
-| `floor` | `(Float) -> Float` | P | Largest integral value not greater than the input. |
-| `ceil` | `(Float) -> Float` | P | Smallest integral value not less than the input. |
-| `pow` | `(Float, Float) -> Float` | P | Exponentiation with C `pow` semantics. |
+| Built-in | Signature                 | Effect | Semantics                                                                                    |
+| -------- | ------------------------- | ------ | -------------------------------------------------------------------------------------------- |
+| `abs`    | `(Int) -> Int`            | P      | Absolute value. Panics for `Int` minimum.                                                    |
+| `abs`    | `(Float) -> Float`        | P      | Absolute value with `fabs` semantics: `NaN` stays `NaN`, and `-0.0` becomes `0.0`.           |
+| `min`    | `(Int, Int) -> Int`       | P      | Smaller value.                                                                               |
+| `min`    | `(Float, Float) -> Float` | P      | Smaller value. If one operand is `NaN`, returns the other; if both are `NaN`, returns `NaN`. |
+| `max`    | `(Int, Int) -> Int`       | P      | Larger value.                                                                                |
+| `max`    | `(Float, Float) -> Float` | P      | Larger value. If one operand is `NaN`, returns the other; if both are `NaN`, returns `NaN`.  |
+| `sqrt`   | `(Float) -> Float`        | P      | Square root. Negative inputs produce `NaN`.                                                  |
+| `floor`  | `(Float) -> Float`        | P      | Largest integral value not greater than the input.                                           |
+| `ceil`   | `(Float) -> Float`        | P      | Smallest integral value not less than the input.                                             |
+| `pow`    | `(Float, Float) -> Float` | P      | Exponentiation with C `pow` semantics.                                                       |
 
 #### Non-deterministic
 
-| Built-in | Signature | Effect | Semantics |
-| --- | --- | --- | --- |
-| `random` | `() -> Int` | N | A pseudo-random 64-bit integer. The sequence is not reproducible across runs. |
-| `now` | `() -> Int` | N | Milliseconds since the Unix epoch. Resolution depends on the platform clock. |
+| Built-in | Signature   | Effect | Semantics                                                                     |
+| -------- | ----------- | ------ | ----------------------------------------------------------------------------- |
+| `random` | `() -> Int` | N      | A pseudo-random 64-bit integer. The sequence is not reproducible across runs. |
+| `now`    | `() -> Int` | N      | Milliseconds since the Unix epoch. Resolution depends on the platform clock.  |
 
 #### Failure behavior
 
@@ -1088,8 +1114,9 @@ their arguments.
   panic on ordinary I/O or UTF-8 errors.
 - The only panic conditions in the built-in catalog are: invalid `slice`
   bounds or UTF-8 boundaries, out-of-bounds `set` on an array, integer
-  overflow in `sum`, `abs` of `Int` minimum, `panic`, and runtime resource
-  failure (for example, out of memory).
+  overflow in `sum`, `abs` of `Int` minimum, a zero `range` step, an empty
+  `split` separator, an empty `replace` pattern, `panic`, and runtime
+  resource failure (for example, out of memory).
 - `exit` and `panic` never return; their result type is `Never`, which is
   assignable to every type.
 
@@ -1164,6 +1191,15 @@ than independently overloaded:
   from the initial accumulator, and requires `(U, T) -> U`.
 - If the collection argument has a union type, the call is a type error;
   eliminate the union first.
+
+`sort` has a default form and a comparator form:
+
+- `sort(collection)` requires the element type to be orderable.
+- `sort(collection, comparator)` accepts any element type; the comparator must
+  return an `Int` whose sign describes the ordering.
+- Sorting is stable in both forms.
+
+`forEach` requires a callback whose result is `Unit` (or `Never`).
 
 Built-in names are not first-class values. A built-in name may only appear
 as the callee of a call expression; it cannot be bound, passed as an
@@ -1275,7 +1311,7 @@ The reference compiler is written in strict C89 and organized as a modular pipel
 
 ### 11.2. Command-line interface
 
-Version 0.1 provides a single command:
+`idem 1.0.0` provides a single command:
 
 ```
 idem file.idem
@@ -1291,7 +1327,7 @@ The compiler:
 
 Compile errors are printed to stderr and cause exit status 1. Usage errors cause exit status 2. A program that calls `panic` exits with 101.
 
-The driver may keep the generated C file for debugging when the `IDEM_KEEP_C` environment variable is set. Additional flags such as `--check` and `--emit-c` may be added in later versions; they are not part of the 0.1 interface.
+The driver may keep the generated C file for debugging when the `IDEM_KEEP_C` environment variable is set. It also supports `--tokens` to print the token stream and `--emit-c` to print the generated C89. Additional flags such as `--check` may be added in later versions; they are not part of the 1.0 interface.
 
 ### 11.3. Diagnostics
 
@@ -1332,7 +1368,7 @@ Golden tests are `.idem` programs with expected stdout, stderr, and exit status.
 
 ### 11.6. Bootstrap and self-hosting
 
-The C89 compiler is the reference implementation for version 0.1. Self-hosting is a future goal, to be evaluated after the language and compiler stabilize. The project does not depend on a bootstrap compiler written in another language.
+The C89 compiler is the reference implementation for `Idem2026`. Self-hosting is a future goal, to be evaluated after the language and compiler stabilize. The project does not depend on a bootstrap compiler written in another language.
 
 ### 11.7. Repository layout and license
 
@@ -1364,9 +1400,9 @@ A conforming implementation must pass the conformance suite, which includes:
 - module tests for imports and cycles;
 - built-in tests for I/O, collections, and non-deterministic functions (with controlled expectations).
 
-### 12.2. Acceptance for version 0.1
+### 12.2. Acceptance for idem 1.0.0
 
-Version 0.1 is accepted when:
+`idem 1.0.0` is accepted when:
 
 - the compiler builds with a strict C89 compiler;
 - `examples/hello.idem`, `examples/factorial.idem`, `examples/fibonacci.idem`, `examples/shapes.idem`, and `examples/collections.idem` compile and produce the expected output;
@@ -1375,14 +1411,16 @@ Version 0.1 is accepted when:
 
 ### 12.3. Versioning
 
-The language specification and the reference compiler are versioned independently:
+The language standard and the reference compiler are versioned independently:
 
-- the language version follows semantic versioning (`MAJOR.MINOR.PATCH`);
-- a major version may break source compatibility;
-- a minor version adds backward-compatible features;
+- the language standard is identified by edition name and year, such as `Idem2026`; a new edition may add or change language features;
+- the reference compiler follows semantic versioning (`MAJOR.MINOR.PATCH`);
+- `idem 1.0.0` is the first stable compiler implementing `Idem2026`;
+- a compiler major version may require a newer language edition;
+- a compiler minor version adds backward-compatible features;
 - a patch version fixes bugs without changing the language.
 
-The current document is version `0.1.0-draft`.
+The current document specifies the `Idem2026` edition. The reference compiler for this edition is `idem 1.0.0`.
 
 ---
 
@@ -1497,6 +1535,15 @@ join        (Array[String], String) -> String
 join        (List[String], String) -> String
 compare     (String, String) -> Int
 compare     (Bytes, Bytes) -> Int
+contains    (String, String) -> Bool
+contains    (Bytes, Bytes) -> Bool
+split       (String, String) -> Array[String]
+trim        (String) -> String
+startsWith  (String, String) -> Bool
+startsWith  (Bytes, Bytes) -> Bool
+endsWith    (String, String) -> Bool
+endsWith    (Bytes, Bytes) -> Bool
+replace     (String, String, String) -> String
 charAt      (String, Int) -> Char | Unit
 chars       (String) -> Array[Char]
 toInt       (String) -> Int | Unit
@@ -1524,6 +1571,18 @@ remove      (Map[K, V], K) -> Map[K, V]
 push        (List[T], T) -> List[T]
 concat      (Array[T], Array[T]) -> Array[T]
 concat      (List[T], List[T]) -> List[T]
+has         (Map[K, V], K) -> Bool
+range       (Int) -> Array[Int]
+range       (Int, Int) -> Array[Int]
+range       (Int, Int, Int) -> Array[Int]
+forEach     (Array[T], T -> Unit) -> Unit
+forEach     (List[T], T -> Unit) -> Unit
+sort        (Array[T]) -> Array[T]
+sort        (Array[T], (T, T) -> Int) -> Array[T]
+sort        (List[T]) -> List[T]
+sort        (List[T], (T, T) -> Int) -> List[T]
+contains    (Array[T], T) -> Bool
+contains    (List[T], T) -> Bool
 map         (Array[T], T -> U) -> Array[U]
 map         (List[T], T -> U) -> List[U]
 filter      (Array[T], T -> Bool) -> Array[T]
