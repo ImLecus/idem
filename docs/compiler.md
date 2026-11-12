@@ -1,7 +1,7 @@
 # The Idem Reference Compiler
 
-**Version:** 0.1.0-draft  
-**Date:** 2026-11-11
+**Version:** 1.0.0
+**Date:** 2026-11-12
 
 ---
 
@@ -47,16 +47,17 @@ typedef signed   short i16;
 typedef unsigned long  u32;
 typedef signed   long  i32;
 
-#if defined(IDEM_HAS_LONG64)
-typedef unsigned long      u64;
-typedef signed   long      i64;
-#else
-typedef struct { u32 lo, hi; } u64;
-typedef struct { u32 lo, hi; } i64;
-#endif
+typedef struct u64 {
+    u16 w[4]; /* little-endian limbs */
+} u64;
 ```
 
-On platforms where `long` is 64 bits, the compiler can use it directly for `Int`; otherwise it uses the two-word representation and the helper functions in `runtime/i64.c` for arithmetic, comparison, shifting, and conversion. The runtime must verify the assumption at startup or at build time.
+`u32` is at least 32 bits; on LP64 it is 64 bits wide, which is harmless
+for the uses in the compiler. `u64` is a portable four-limb
+representation so the lexer does not depend on `long long`. The runtime
+uses `long` for `Int` and requires it to be 64 bits; `runtime/value.c`
+checks this at build time. There is no two-word runtime fallback in
+`idem 1.0.0`.
 
 ### 2.2. Source locations
 
@@ -90,33 +91,39 @@ Arena allocation is freed all at once when compilation finishes. This keeps the 
 ```
 src/
     main.c          driver and CLI
-    platform.h      integer typedefs and compiler abstraction
+    platform.c/.h   integer typedefs, helpers, compiler abstraction
     arena.c/.h      arena allocator
-    string.c/.h     string interner and growable buffers
     lexer.c/.h      UTF-8 lexer
-    token.h         token kinds and spans
-    ast.c/.h        AST node definitions
+    token.c/.h      token kinds, spans, and token names
+    ast.c/.h        AST node definitions and dumper
     parser.c/.h     recursive-descent parser
     resolver.c/.h   imports, top-level names, aliases, signatures
     types.c/.h      type representation, unions, subtyping, joins
     check.c/.h      bidirectional type checker
-    exhaust.c/.h    exhaustiveness and usefulness checks
-    lower.c/.h      typed AST to IR, coercions, closures, patterns
+    ir.c/.h         typed AST lowering to a slot-based IR
     codegen.c/.h    C89 emission
-    diag.c/.h       diagnostics
+    version.h       compiler and language version strings
 runtime/
-    value.h         Value representation and tags
-    gc.c/.h         mark-sweep collector and shadow stack
-    string.c/.h     strings and bytes
-    array.c/.h      arrays
-    list.c/.h       persistent lists
-    map.c/.h        persistent insertion-ordered maps
-    print.c/.h      canonical rendering
-    io.c/.h         file and console I/O
-    error.c/.h      Error enum helpers
+    value.h         Value representation, tags, and runtime API
+    internal.h      heap object layouts and internal helpers
+    value.c         allocation, GC, constructors, equality, descriptors
+    string.c        UTF-8, buffers, string helpers
+    string_ops.c    string/bytes built-ins and conversions
+    collection.c    arrays, lists, maps, higher-order collection built-ins
+    print.c         canonical rendering
+    io.c            console/file I/O, panic, exit
+    math.c          integer/float arithmetic and math built-ins
 tests/
-    unit/           lexer, parser, types, checker tests
-    golden/         .idem programs with expected output
+    unit/           lexer, parser, resolver, checker tests
+    golden/         .idem programs with expected stdout/stderr/exit
+    run_golden.sh   golden test runner
+    run_cli.sh      command-line interface tests
+    run_reloc.sh    relocatable runtime test
+benchmarks/
+    README.md       benchmark methodology and knobs
+    compiler_bench.c in-process phase timing
+    generate_inputs.sh synthetic compiler and runtime workloads
+    run.sh          runtime benchmark driver
 examples/
 docs/
 private/
@@ -128,7 +135,7 @@ LICENSE
 
 ## 4. Driver and CLI
 
-`src/main.c` implements the single command:
+`src/main.c` implements the single compilation command:
 
 ```
 idem file.idem [program arguments...]
@@ -139,19 +146,36 @@ Steps:
 1. Read `file.idem` as UTF-8.
 2. Run the compiler pipeline.
 3. If there are errors, print diagnostics to stderr and exit 1.
-4. Write the generated C89 to a temporary file, for example `/tmp/idem-XXXXXX.c`.
-5. Invoke the system C compiler:
+4. Create a private temporary directory with `mkdtemp` and write the
+   generated C89 to `main.c` inside it.
+5. Resolve the runtime source directory:
+   - `$IDEM_RUNTIME_DIR` when set;
+   - otherwise `../lib/idem/runtime` or `runtime` relative to the
+     executable;
+   - otherwise the build-tree location compiled into the driver.
+6. Invoke the system C compiler:
    - use `$CC` if set, otherwise `cc`;
-   - compile the generated C file and the runtime sources;
-   - pass `-std=c89 -pedantic -Wall` for the reference build (the generated code should compile under strict C89);
+   - compile the generated C file together with the runtime sources in
+     the resolved runtime directory;
+   - pass `-std=c89 -pedantic -Wall -Wextra -O2` for the reference build;
    - produce a temporary executable.
-6. Run the executable with the remaining program arguments.
-7. Forward the program's exit status.
-8. Delete the temporary files unless `IDEM_KEEP_C` is set.
+7. Run the executable with the remaining program arguments using
+   `fork` and `execv`, so arguments are forwarded without shell parsing.
+8. Forward the program's exit status.
+9. Delete the temporary directory unless `IDEM_KEEP_C` is set.
 
 Usage errors exit with status 2. Compile errors exit with status 1. A program that calls `panic` exits with 101. A normal `main` exits with 0 unless the program calls `exit`.
 
-The driver does not need a build system, a manifest, or a package manager in version 0.1.
+The driver also supports inspection and metadata modes:
+
+- `idem --tokens file.idem` prints the token stream;
+- `idem --emit-c file.idem` prints the generated C89;
+- `idem --version` prints `idem 1.0.0 (Idem2026)`;
+- `idem --help` prints usage and environment variables.
+
+The driver requires a POSIX platform for `mkdtemp`, `fork`, and `execv`;
+the generated code and runtime remain strict C89. The driver does not
+need a build system, a manifest, or a package manager in `idem 1.0.0`.
 
 ---
 
@@ -175,8 +199,9 @@ Token kinds include:
 
 Spaces and tabs are skipped. Newlines produce a `newline` token. Consecutive newlines can be collapsed into one. Comments are skipped:
 
-- `--` skips to the end of the line;
-- `{- ... -}` skips a nested block comment.
+- `#` skips to the end of the line.
+
+There are no block comments.
 
 ### 5.4. Identifiers and keywords
 
@@ -207,7 +232,7 @@ The parser treats `newline` as a separator inside blocks. The lexer can suppress
 The lexer reports:
 
 - invalid UTF-8;
-- unterminated strings, chars, and block comments;
+- unterminated strings and chars;
 - invalid escapes;
 - invalid numeric literals;
 - integer overflow.
@@ -344,7 +369,7 @@ The resolver checks:
 
 ### 7.7. Name collisions
 
-Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. Version 0.1 has no qualified names or import aliases.
+Because imports are unqualified, the resolver inserts imported top-level names into the importing module's top-level scope. A collision is a compile error. `Idem2026` has no qualified names or import aliases.
 
 ---
 
@@ -522,44 +547,70 @@ Each diagnostic includes a primary span and an optional note.
 
 ### 9.1. Typed AST to IR
 
-The typed AST still contains high-level constructs. Lowering produces a smaller IR:
+The typed AST still contains high-level constructs. Lowering produces a smaller, slot-based IR:
 
-- explicit coercions and tags;
-- closures converted to explicit environments;
-- pattern matches compiled to decision trees;
-- `let` patterns desugared to bindings and projections;
-- collection literals desugared to runtime calls;
-- `if` remains a conditional;
-- function calls become direct or indirect calls.
+- every local, temporary, and parameter lives in a numbered `Value` slot;
+- expressions lower to statements that write a slot;
+- `if`, `match`, and blocks become statement nodes;
+- patterns are kept in match arms with precomputed binding slots and projection statements;
+- closures become separate IR functions plus explicit capture lists;
+- collection and struct/enum literals become constructor expressions over argument slots;
+- calls become direct calls to named functions or indirect calls through a closure value.
+
+The IR is defined in `src/ir.h`:
+
+```c
+typedef struct IrStmt IrStmt;
+typedef struct IrExpr IrExpr;
+typedef struct IrFunction IrFunction;
+
+struct IrFunction {
+    int id;
+    int is_lambda;
+    const char *name;
+    int param_count;
+    int slot_count;
+    int result_slot;
+    IrCapture *captures;
+    IrStmt *body;
+};
+```
+
+Statements are `let` (slot assignment), `if`, `match`, and blocks. Expressions are constants, slot reads, function/closure values, direct or indirect calls, built-ins, struct/enum/collection constructors, projections, indexing, and primitive operators.
 
 ### 9.2. Coercions and tags
 
-A union value is represented as a tagged `Value`. A coercion from `T` to `T | U` sets the tag to `T`'s runtime tag. A coercion from `T` to `Any` boxes the value and keeps its tag.
+Every `Value` already carries its runtime tag. Union injection and `Any` widening therefore lower to **no code**: the value keeps its tag and payload. `Never` coercions also produce no code because those paths never execute.
 
-`Never` coercions produce no code; they are unreachable.
+Static types recorded by the checker on AST nodes are still used by codegen to choose:
+
+- integer versus floating-point arithmetic;
+- specialized `sum`, `min`, `max`, and `abs` helpers;
+- nominal type descriptors for struct/enum construction and type patterns.
 
 ### 9.3. Closures
 
 For each lambda:
 
-1. Compute free variables.
-2. Create an environment object holding the captured values.
-3. Generate a function whose first parameter is the environment pointer.
-4. A closure value stores the function pointer and the environment.
+1. Lowering records the enclosing function as its parent.
+2. Each free variable is turned into a capture slot in the lambda and, transitively, in any enclosing lambdas.
+3. The capture list records the slot in the parent function that supplies each value.
+4. At runtime a closure value stores a C function pointer and a `Value` array of captured values.
+5. The generated function loads its capture slots from the environment at entry.
 
-Named functions have no environment (or an empty one) and can be called directly.
+Named functions have no captures and ignore the environment argument.
 
 ### 9.4. Pattern matching
 
-Compile `match` to a decision tree:
+`match` lowers to an ordered sequence of guarded arm blocks:
 
-- switch on runtime tags for enums, unions, and `Any` (though `Any` patterns are not allowed in user code);
-- compare literals for primitive patterns;
-- project tuple/struct fields;
-- bind variables;
-- fall through to the next arm if a pattern fails.
+- the scrutinee is evaluated once into a slot;
+- each arm gets a generated C boolean test built from runtime tag checks, nominal descriptor checks, variant checks, literal comparisons, and safe field projections;
+- projections are short-circuited, so a payload is only read after its tag and descriptor match;
+- binding statements run only after the whole pattern test succeeds;
+- the selected arm writes the result slot and jumps to the end of the match.
 
-The exhaustiveness check guarantees that the final fallback is unreachable, but the code generator can still emit a `panic("non-exhaustive match")` as a safety net.
+Exhaustiveness is guaranteed by the checker. Codegen still emits a `panic("non-exhaustive match")` fallback as a safety net.
 
 ### 9.5. Collections
 
@@ -584,97 +635,97 @@ The runtime defines:
 
 ```c
 typedef enum {
-    TAG_UNIT, TAG_BOOL, TAG_INT, TAG_FLOAT, TAG_CHAR,
-    TAG_STRING, TAG_BYTES, TAG_ARRAY, TAG_LIST, TAG_MAP,
-    TAG_STRUCT, TAG_ENUM, TAG_CLOSURE
-} Tag;
+    IDEM_TAG_UNIT, IDEM_TAG_BOOL, IDEM_TAG_INT, IDEM_TAG_FLOAT,
+    IDEM_TAG_CHAR, IDEM_TAG_STRING, IDEM_TAG_BYTES, IDEM_TAG_ARRAY,
+    IDEM_TAG_LIST, IDEM_TAG_MAP, IDEM_TAG_TUPLE, IDEM_TAG_STRUCT,
+    IDEM_TAG_ENUM, IDEM_TAG_CLOSURE
+} IdemTag;
 
 typedef struct Value {
-    u32 tag;
+    IdemTag tag;
     union {
-        i64 i;
+        long i;          /* Int; the runtime requires 64-bit long */
         double f;
-        u32 c;
+        unsigned long c;
         void *obj;
     } as;
 } Value;
 ```
 
-On platforms without a native 64-bit integer, `i64` is a two-word struct with helper functions for arithmetic and comparison.
+The runtime assumes a C implementation whose `long` is 64 bits; this is checked at build time. A two-word fallback can be added later without changing the IR.
 
 ### 10.2. Heap objects
 
 Every heap object starts with a header:
 
 ```c
-typedef struct ObjHeader {
-    u32 mark;
-    u32 tag;
-    size_t size;
-    struct ObjHeader *next;
-} ObjHeader;
+typedef struct IdemObj {
+    unsigned int mark;
+    unsigned int kind;
+    struct IdemObj *next;
+} IdemObj;
 ```
 
 Specific objects embed the header first:
 
 ```c
-typedef struct StringObj {
-    ObjHeader header;
+typedef struct IdemStringObj {
+    IdemObj header;
     size_t length;
     char *data;
-} StringObj;
+} IdemStringObj;
 ```
 
-Arrays, lists, maps, structs, enums, and closures follow the same pattern.
+Arrays, lists, tuples, maps, structs, enums, and closures follow the same pattern.
 
 ### 10.3. Functions
 
-Each Idem function becomes a C function:
+Every generated function has the same C signature:
 
 ```c
-static Value idem_module_function(Value *args, size_t argc);
+Value idem_fn_name(Value *env, Value *args, size_t argc);
 ```
 
-- Named functions take their arguments in an array.
-- Closures take an environment pointer as an implicit first argument.
-- The generated C function checks arity only in debug builds; the type checker guarantees it.
+- Named functions ignore `env`.
+- Closures receive their captured values in `env`.
+- Parameters are copied from `args` into slots at entry.
 - The return value is a `Value`.
+- The type checker guarantees arity; generated code does not add an arity check.
 
 ### 10.4. Shadow stack
 
-The runtime maintains a shadow stack of live `Value` roots:
+The runtime maintains a stack of rooted slot frames:
 
 ```c
-void gc_push(Value v);
-void gc_pop(void);
+void idem_gc_push_frame(Value *slots, size_t count);
+void idem_gc_pop_frame(void);
 ```
 
-The code generator pushes locals and temporaries that must survive an allocation, and pops them at the end of their scope. A simple conservative approach is to push every local slot and temporary; a more precise approach uses liveness information.
+Each generated function allocates one `Value slots[N]` array, initializes every slot to unit, and pushes the whole array as a GC root frame. Temporaries and locals all live in this array, so the collector traces them conservatively but precisely enough for correctness. Runtime functions that build intermediate `Value` arrays push additional temporary frames.
 
 ### 10.5. Allocation
 
-`gc_alloc(size, tag)`:
+`idem_obj_alloc(size, tag)`:
 
-1. If the free list has a suitable block, reuse it.
-2. Otherwise, request memory from the system allocator.
-3. If allocation fails, call `runtime_panic("out of memory")`.
-4. If the heap exceeds a threshold, trigger a collection before allocating.
+1. If the allocation count since the last collection exceeds the threshold, run a collection.
+2. Request memory from the system allocator.
+3. If that fails, collect and retry.
+4. If it still fails, call `idem_panic_oom`.
+5. Link the new object into the global object list.
 
 ### 10.6. Garbage collection
 
 Mark-sweep:
 
-- `gc_mark(Value v)` marks the object and recursively marks its fields;
-- `gc_collect()` marks from the shadow stack and global roots, then sweeps unmarked objects into the free list;
+- `idem_gc_collect()` marks from all rooted slot frames;
 - objects never move;
+- unmarked objects are freed together with their owned arrays/data;
 - there are no finalizers.
 
-The collector must trace:
+The collector traces:
 
-- string/bytes data (no `Value` fields, but the object itself is heap-allocated);
-- array elements;
-- list nodes and elements;
-- map entries (keys and values);
+- array/list/tuple elements;
+- map keys and values;
 - struct fields;
 - enum payloads;
 - closure environments.
@@ -682,26 +733,31 @@ The collector must trace:
 ### 10.7. Control flow
 
 - `if` becomes a C `if`.
-- Blocks become C blocks with local `Value` variables.
-- `match` becomes a sequence of tag checks, literal comparisons, and field projections.
-- `&&` and `||` use C short-circuit operators on `Bool` values.
+- Blocks become C blocks.
+- `match` becomes a sequence of tag checks, literal comparisons, and field projections, with generated `goto` labels for the selected arm.
+- `&&` and `||` are lowered to `if` statements so short-circuiting is preserved.
 - `Never` expressions call `panic` or `exit` and do not return.
 
 ### 10.8. Strings and collections
 
 The runtime provides:
 
-- `string_new`, `string_concat`, `string_slice`, `string_compare`, `string_byte_at`, `string_char_at`, `string_chars`, `string_to_bytes`, `bytes_to_string`;
-- `array_new`, `array_get`, `array_set`, `array_slice`, `array_concat`;
-- `list_new`, `list_push`, `list_get`, `list_concat`;
-- `map_new`, `map_get`, `map_set`, `map_remove`, `map_keys`, `map_values`;
-- `value_print`, `value_to_string`.
+- `idem_string`, `idem_bytes`, `idem_concat`, `idem_slice`,
+  `idem_compare`, `idem_byte_at`, `idem_char_at`, `idem_chars`,
+  `idem_to_bytes`, `idem_from_bytes`;
+- `idem_array`, `idem_list`, `idem_map_lit`, `idem_get`, `idem_set`,
+  `idem_remove`, `idem_push`, `idem_concat`, `idem_join`, `idem_has`,
+  `idem_range`, `idem_for_each`, `idem_sort`, `idem_contains`;
+- `idem_map`, `idem_filter`, `idem_fold`, `idem_sum_int`,
+  `idem_sum_float`, `idem_keys`, `idem_values`, `idem_split`, `idem_trim`,
+  `idem_starts_with`, `idem_ends_with`, `idem_replace`;
+- `idem_print`, `idem_to_string`, `idem_panic`.
 
-All collection operations preserve immutability in the observable API. Internally, the runtime may use copy-on-write, reference counting for shared nodes, or persistent data structures. The GC handles reclamation.
+All collection operations preserve immutability in the observable API. The reference runtime copies on update. The GC handles reclamation.
 
 ### 10.9. Printing
 
-`value_print` implements the canonical rendering from `docs/language.md` §9.4:
+`idem_print` and `idem_to_string` implement the canonical rendering from `docs/language.md` §9.4:
 
 - integers in decimal;
 - floats with the shortest round-trip algorithm;
@@ -733,17 +789,24 @@ This is deterministic as long as `strtod` and `printf` are correctly rounded; th
 The generated C file contains:
 
 ```c
-int main(int argc, char **argv) {
-    runtime_init();
-    Value args = build_args_array(argc, argv);
-    Value result = idem_main(args);
+int main(int argc, char **argv)
+{
+    Value args[1];
+    Value result;
+
+    idem_runtime_init();
+    args[0] = idem_args_array(argc, argv, &idem_stype_0,
+                              "program.idem");
+    idem_gc_push_frame(args, 1);
+    result = idem_fn_main(NULL, args, 1);
     (void)result;
+    idem_gc_pop_frame();
     fflush(stdout);
     return 0;
 }
 ```
 
-`build_args_array` creates an `Array[String]` with `argv[0]` first.
+`idem_args_array` creates an `Array[String]` whose first element is the source-path string passed to the compiler, followed by the program's command-line arguments.
 
 ---
 
@@ -773,43 +836,30 @@ int main(int argc, char **argv) {
 
 ### 11.4. Lists
 
-- A persistent linked list is the simplest implementation:
-
-```c
-typedef struct ListNode {
-    ObjHeader header;
-    Value head;
-    struct ListNode *tail;
-    size_t length;
-} ListNode;
-```
-
-- `push` allocates a new node.
-- `get` walks the list; this is O(n). A persistent vector can be added later.
-- `concat` copies the first list and appends the second.
-- `map`, `filter`, and `fold` walk the list.
+- A list is stored as an immutable length-plus-`Value` array, like an array but with a distinct tag.
+- `push` copies the elements into a new list with one extra element.
+- `get` is O(1); `concat`, `map`, `filter`, and `fold` walk the array.
+- A persistent linked or tree representation can replace this later without changing the language or IR.
 
 ### 11.5. Maps
 
-- A persistent insertion-ordered map can be implemented as:
-  - a persistent vector of entries in insertion order;
-  - a persistent hash index from key hash to entry index;
-  - `set` appends a new entry or replaces the value at an existing index;
-  - `remove` removes the entry and rebuilds the index.
-- This is simple and deterministic. A more efficient HAMT can replace it later.
-- Keys must be hashable; the runtime provides `value_hash` and `value_equal` for hashable types.
+- A map is stored as two parallel `Value` arrays (keys and values) in insertion order.
+- `set` replaces an existing key in place or appends a new entry.
+- `remove` copies all entries except the matching key.
+- Lookup is a linear scan using structural equality. This is simple and deterministic; a hash index can replace it later.
 - `keys` and `values` return arrays in insertion order.
 
 ### 11.6. Structs and enums
 
-- `StructObj` stores a type ID and a `Value` array of fields.
-- `EnumObj` stores a type ID, a variant index, and a `Value` array of payloads.
+- `StructObj` stores a type descriptor pointer and a `Value` array of fields.
+- `EnumObj` stores a type descriptor pointer, a variant index, and a `Value` array of payloads.
 - Field access is an array index; the compiler knows the layout.
-- Pattern matching checks the type ID and variant index.
+- Pattern matching checks the descriptor pointer and variant index.
+- Arrays, lists, maps, tuples, and closures also store a structural type descriptor pointer so that type patterns on unions such as `Array[Int] | Array[String]` are distinguishable at runtime. The compiler interns one descriptor per structurally equal type.
 
 ### 11.7. Closures
 
-- `ClosureObj` stores a function pointer and a `Value` array of captured values.
+- `ClosureObj` stores a function pointer, a structural function-type descriptor, and a `Value` array of captured values.
 - Calling a closure passes the environment as an implicit argument.
 
 ---
@@ -835,7 +885,7 @@ tests/golden/factorial/
     exit.txt
 ```
 
-The test runner compiles and runs `main.idem`, compares stdout, stderr, and exit status, and reports a diff on failure.
+The test runner (`tests/run_golden.sh`, invoked by `make golden`) compiles and runs `main.idem`, compares stdout, stderr, and exit status, and reports a diff on failure.
 
 ### 12.3. Example programs
 
@@ -847,9 +897,15 @@ The test runner compiles and runs `main.idem`, compares stdout, stderr, and exit
 - `shapes.idem`
 - `collections.idem`
 
-### 12.4. Error tests
+### 12.4. Benchmarks
 
-Error tests contain an `.idem` file and an `errors.txt` file with expected diagnostics. The runner compares file, line, column, and message.
+`benchmarks/` contains performance inputs and runners:
+
+- `make bench-compiler` measures resolver, checker, lowering, and codegen CPU time on a generated module with hundreds of nominal types and functions;
+- `make bench-runtime` compiles a set of workloads once and measures wall time for recursion, arrays, strings, maps, GC, recursive enums, and closures;
+- `make bench` runs both.
+
+The compiler benchmark runs the pipeline in-process. The runtime benchmark excludes C compilation by generating and building each workload once before timing repeated executions. See `benchmarks/README.md` for workload sizes and environment variables.
 
 ### 12.5. Future testing
 
@@ -857,12 +913,13 @@ Error tests contain an `.idem` file and an `errors.txt` file with expected diagn
 - Fuzzing for the lexer and parser.
 - Differential tests against a reference interpreter.
 - Stress tests for the GC.
+- Automated performance regression tracking.
 
 ---
 
 ## 13. Implementation Plan
 
-A practical order for building version 0.1:
+A practical order for building the reference compiler:
 
 1. **Skeleton:** arena, diagnostics, token definitions, driver.
 2. **Lexer:** all tokens, UTF-8, comments, literals.
@@ -878,7 +935,7 @@ A practical order for building version 0.1:
 12. **Tests and examples:** golden tests, unit tests, acceptance programs.
 13. **Polish:** diagnostics, float formatting, documentation.
 
-Version 0.1 deliberately omits:
+The first executable milestone deliberately omitted:
 
 - modules in the first executable milestone (they can be added after the core works);
 - `List` and `Map` in the first milestone (arrays, strings, and structs/enums are enough to validate the model);
@@ -912,5 +969,5 @@ Self-hosting should wait until the language and the C89 compiler have stabilized
 - **`Any` is opaque.** Do not expose `typeOf` or casts in user code. Built-ins may inspect tags, but the type checker must reject user pattern matching on `Any`.
 - **Float formatting is subtle.** Test `0.1`, `1e300`, `NaN`, `-0.0`, and denormals.
 - **Map iteration order matters.** Preserve insertion order so that `keys`, `values`, and printing are deterministic.
-- **C89 portability matters.** Avoid `long long` in generated code; use the runtime's 64-bit helpers.
+- **C89 portability matters.** Avoid `long long` in generated code; the runtime uses 64-bit `long` and checks the assumption at build time.
 - **Diagnostics should point at the smallest useful span.** A good error message is part of the language experience.

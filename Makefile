@@ -1,0 +1,154 @@
+# Idem -- build system
+#
+# The reference compiler is strict C89.  Sources are discovered with
+# wildcard, so adding a .c file under src/ or runtime/ requires no edit
+# here.
+#
+# Targets:
+#   make            build the compiler when src/*.c exists
+#   make runtime    build build/libidemrt.a when runtime/*.c exists
+#   make test       build and run the unit tests
+#   make golden     compile and run the golden tests
+#   make bench      build and run compiler and runtime benchmarks
+#   make check      clean rebuild
+#   make dirs       create the directory skeleton
+#   make clean      remove build artifacts
+
+CC       ?= cc
+AR       ?= ar
+CFLAGS   ?= -std=c89 -pedantic -Wall -Wextra -O2 -g
+CPPFLAGS ?=
+LDFLAGS  ?=
+LDLIBS   ?= -lm
+
+RUNTIME_DIR_ABS := $(abspath runtime)
+
+BIN         := idem
+BUILD       := build
+OBJDIR      := $(BUILD)/obj
+RUNTIME_DIR := $(BUILD)/runtime
+RUNTIME_LIB := $(BUILD)/libidemrt.a
+
+SRC         := $(wildcard src/*.c)
+OBJ         := $(patsubst src/%.c,$(OBJDIR)/%.o,$(SRC))
+CORE_OBJ    := $(filter-out $(OBJDIR)/main.o,$(OBJ))
+RUNTIME_SRC := $(wildcard runtime/*.c)
+RUNTIME_OBJ := $(patsubst runtime/%.c,$(RUNTIME_DIR)/%.o,$(RUNTIME_SRC))
+
+UNIT_SRC    := $(wildcard tests/unit/*.c)
+UNIT_OBJ    := $(patsubst tests/unit/%.c,$(BUILD)/unit/%.o,$(UNIT_SRC))
+UNIT_BIN    := $(BUILD)/unit-tests
+
+RELOC_MAIN  := $(BUILD)/reloc/main.o
+RELOC_BIN   := $(BUILD)/idem-reloc
+
+COMPILER_BENCH := $(BUILD)/compiler-bench
+
+.PHONY: all compiler runtime test check dirs clean help golden cli \
+        bench bench-compiler bench-runtime
+
+all: compiler runtime
+
+compiler: $(BIN)
+
+$(BIN): $(OBJ)
+	@if [ -z "$(SRC)" ]; then \
+		echo "idem: no compiler sources in src/ yet (structure only)"; \
+	else \
+		$(CC) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS); \
+	fi
+
+$(OBJDIR)/%.o: src/%.c
+	@mkdir -p $(OBJDIR)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/main.o: src/main.c src/version.h
+	@mkdir -p $(OBJDIR)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
+$(OBJDIR)/main.o: CPPFLAGS += -DIDEM_RUNTIME_DIR=\"$(RUNTIME_DIR_ABS)\"
+
+$(RELOC_MAIN): src/main.c src/version.h
+	@mkdir -p $(BUILD)/reloc
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) \
+		-DIDEM_RUNTIME_DIR=\"/nonexistent-idem-runtime\" -c $< -o $@
+
+$(RELOC_BIN): $(RELOC_MAIN) $(CORE_OBJ)
+	$(CC) $(LDFLAGS) -o $@ $(RELOC_MAIN) $(CORE_OBJ) $(LDLIBS)
+
+runtime: $(RUNTIME_LIB)
+
+$(RUNTIME_LIB): $(RUNTIME_OBJ)
+	@mkdir -p $(BUILD)
+	@if [ -z "$(RUNTIME_SRC)" ]; then \
+		echo "runtime: no runtime sources in runtime/ yet (structure only)"; \
+	else \
+		$(AR) rcs $@ $(RUNTIME_OBJ); \
+	fi
+
+$(RUNTIME_DIR)/%.o: runtime/%.c
+	@mkdir -p $(RUNTIME_DIR)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
+test: compiler runtime $(UNIT_BIN)
+	@if [ -x "$(UNIT_BIN)" ]; then \
+		"$(UNIT_BIN)"; \
+	else \
+		echo "test: no unit tests yet"; \
+	fi
+
+golden: compiler
+	@sh tests/run_golden.sh
+
+cli: compiler $(RELOC_BIN)
+	@IDEM_BIN="$(abspath $(BIN))" sh tests/run_cli.sh
+	@IDEM_RELOC_BIN="$(abspath $(RELOC_BIN))" sh tests/run_reloc.sh
+
+bench: compiler $(COMPILER_BENCH)
+	@sh benchmarks/run.sh all
+
+bench-compiler: compiler $(COMPILER_BENCH)
+	@sh benchmarks/run.sh compiler
+
+bench-runtime: compiler
+	@sh benchmarks/run.sh runtime
+
+$(COMPILER_BENCH): benchmarks/compiler_bench.c $(CORE_OBJ)
+	@mkdir -p $(BUILD)
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) benchmarks/compiler_bench.c \
+		$(CORE_OBJ) $(LDLIBS) -o $@
+
+$(UNIT_BIN): $(UNIT_OBJ) $(CORE_OBJ)
+	@if [ -z "$(UNIT_SRC)" ]; then \
+		echo "unit: no unit tests in tests/unit/ yet"; \
+	else \
+		$(CC) $(LDFLAGS) -o $@ $(UNIT_OBJ) $(CORE_OBJ) $(LDLIBS); \
+	fi
+
+$(BUILD)/unit/%.o: tests/unit/%.c
+	@mkdir -p $(BUILD)/unit
+	$(CC) $(CPPFLAGS) -Isrc $(CFLAGS) -c $< -o $@
+
+check: clean compiler
+
+dirs:
+	@mkdir -p src runtime tests/unit tests/golden $(OBJDIR) $(RUNTIME_DIR)
+	@touch runtime/.gitkeep tests/golden/.gitkeep
+
+clean:
+	rm -rf $(BUILD) $(BIN)
+
+help:
+	@echo "Idem build targets:"
+	@echo "  all (default)  build the compiler when src/*.c exists"
+	@echo "  compiler       same as all"
+	@echo "  runtime        build build/libidemrt.a when runtime/*.c exists"
+	@echo "  test           build and run unit tests from tests/unit/"
+	@echo "  golden         compile and run golden tests from tests/golden/"
+	@echo "  cli            run command-line and relocation tests"
+	@echo "  bench          run compiler and runtime benchmarks"
+	@echo "  bench-compiler run only the compiler phase benchmark"
+	@echo "  bench-runtime  run only the generated-program benchmarks"
+	@echo "  check          clean rebuild of the compiler"
+	@echo "  dirs           create the directory skeleton"
+	@echo "  clean          remove build artifacts"

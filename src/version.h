@@ -1,0 +1,7 @@
+#ifndef IDEM_VERSION_H
+#define IDEM_VERSION_H
+
+#define IDEM_VERSION "1.0.0"
+#define IDEM_LANGUAGE_VERSION "Idem2026"
+
+#endif /* IDEM_VERSION_H */

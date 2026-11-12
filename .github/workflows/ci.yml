@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: C89 / ${{ matrix.compiler }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - gcc
+          - clang
+
+    env:
+      CFLAGS: -std=c89 -pedantic -Wall -Wextra -Werror -Wdeclaration-after-statement -O2 -g
+      CC: ${{ matrix.compiler }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show compiler version
+        run: ${{ matrix.compiler }} --version
+
+      - name: Build and run unit tests
+        run: make CC=${{ matrix.compiler }} test
+
+      - name: Run golden tests
+        run: make CC=${{ matrix.compiler }} golden
+
+      - name: Run CLI and relocation tests
+        run: make CC=${{ matrix.compiler }} cli
+
+      - name: Build and run compiler benchmark
+        run: IDEM_BENCH_ITERATIONS=1 make CC=${{ matrix.compiler }} bench-compiler
+
+      - name: Compile generated C with strict warnings
+        run: |
+          for file in examples/*.idem; do
+            ./idem --emit-c "$file" > /tmp/idem-generated.c
+            ${{ matrix.compiler }} -std=c89 -pedantic -Wall -Wextra -Werror \
+              -Iruntime -c /tmp/idem-generated.c -o /tmp/idem-generated.o
+          done
+
+      - name: Run example programs
+        run: |
+          for file in examples/*.idem; do
+            ./idem "$file" >/dev/null
+          done
+          ./idem --tokens examples/hello.idem >/dev/null

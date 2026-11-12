@@ -1,0 +1,14 @@
+fn main(args: Array[String]) -> Unit = {
+    let empty_a: Array[String] = []
+    let empty_l: List[String] = List[]
+
+    println(join(["a", "b", "c"], ","))
+    println(join(List["x", "y"], "-"))
+    println(join([], ","))
+    println(join(List[], ","))
+    println(join(empty_a, ","))
+    println(join(empty_l, ","))
+    println(join(["only"], ","))
+    println(join(["", ""], "--"))
+    println(join(["α", "β"], " | "))
+}
